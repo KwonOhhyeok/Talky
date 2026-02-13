@@ -116,7 +116,6 @@ async function startCall() {
     localStorage.setItem("talky:last_session_id", sessionId.value);
     const response = await fetch(`${apiBase}/api/ephemeral-token`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
     });
     if (!response.ok) throw new Error("Token request failed");
     const data = await response.json();

@@ -9,6 +9,7 @@ export type GeminiLiveOptions = {
   modelId?: string;
   model?: string;
   outputSampleRate?: number;
+  debug?: boolean;
   onTranscript?: (entry: TranscriptEntry) => void;
   onStatus?: (status: string) => void;
   onAudioStart?: () => void;
@@ -26,6 +27,8 @@ export class GeminiLiveSession {
   modelId?: string;
   model: string;
   outputSampleRate: number;
+  debug: boolean;
+  audioChunkCount = 0;
   onTranscript?: (entry: TranscriptEntry) => void;
   onStatus?: (status: string) => void;
   onAudioStart?: () => void;
@@ -37,6 +40,7 @@ export class GeminiLiveSession {
     this.model =
       options.model || "gemini-2.5-flash-native-audio-preview-12-2025";
     this.outputSampleRate = options.outputSampleRate || 24000;
+    this.debug = options.debug ?? true;
     this.onTranscript = options.onTranscript;
     this.onStatus = options.onStatus;
     this.onAudioStart = options.onAudioStart;
@@ -60,6 +64,12 @@ export class GeminiLiveSession {
         ? "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained"
         : "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
     const url = `${endpoint}?access_token=${encodeURIComponent(ephemeralToken)}`;
+    this.log("connect:start", {
+      apiVersion: this.apiVersion,
+      endpoint,
+      modelId: this.modelId,
+      tokenPrefix: ephemeralToken.slice(0, 16),
+    });
 
     this.socket = new WebSocket(url);
     this.socket.binaryType = "arraybuffer";
@@ -67,15 +77,22 @@ export class GeminiLiveSession {
     return new Promise<void>((resolve, reject) => {
       if (!this.socket) return;
       this.socket.onopen = () => {
+        this.log("ws:open");
         this.sendConfig();
         this.onStatus?.("connected");
         resolve();
       };
       this.socket.onerror = (err) => {
+        this.log("ws:error", err);
         this.onStatus?.("error");
         reject(err);
       };
-      this.socket.onclose = () => {
+      this.socket.onclose = (event) => {
+        this.log("ws:close", {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+        });
         this.onStatus?.("closed");
       };
       this.socket.onmessage = (event) => this.handleMessage(event);
@@ -88,17 +105,22 @@ export class GeminiLiveSession {
       this.outputGain = this.audioContext.createGain();
       this.outputGain.gain.value = 1;
       this.outputGain.connect(this.audioContext.destination);
+      this.log("audio:context-created", {
+        sampleRate: this.audioContext.sampleRate,
+      });
     }
 
     this.mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
     });
+    this.log("audio:mic-granted");
 
     const workletUrl = new URL(
       "./worklets/pcm-encoder-worklet.js",
       import.meta.url
     );
     await this.audioContext.audioWorklet.addModule(workletUrl);
+    this.log("audio:worklet-loaded");
 
     const source = this.audioContext.createMediaStreamSource(this.mediaStream);
     const workletNode = new AudioWorkletNode(this.audioContext, "pcm-encoder");
@@ -129,29 +151,47 @@ export class GeminiLiveSession {
         },
       },
     };
+    this.log("ws:send-setup", payload);
     this.socket.send(JSON.stringify(payload));
   }
 
   sendAudioChunk(pcm16: ArrayBuffer) {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
     if (this.muted) return;
+    this.audioChunkCount += 1;
+    if (this.audioChunkCount % 50 === 0) {
+      this.log("audio:chunk-sent", {
+        count: this.audioChunkCount,
+        bytes: pcm16.byteLength,
+      });
+    }
     this.socket.send(pcm16);
   }
 
   handleMessage(event: MessageEvent) {
+    if (typeof event.data !== "string") {
+      this.log("ws:message-nonjson", { type: typeof event.data });
+      return;
+    }
+
     let msg: any = null;
     try {
-      msg = typeof event.data === "string" ? JSON.parse(event.data) : null;
+      msg = JSON.parse(event.data);
     } catch (err) {
+      this.log("ws:message-parse-error", {
+        preview: event.data.slice(0, 200),
+      });
       return;
     }
 
     if (!msg) return;
+    this.log("ws:message", { keys: Object.keys(msg) });
 
     if (msg.transcript || msg.text) {
       const text = msg.transcript || msg.text;
       const speakerRaw = msg.speaker || msg.role || "model";
       const speaker = String(speakerRaw).toLowerCase();
+      this.log("transcript", { speaker, textPreview: String(text).slice(0, 120) });
       this.onTranscript?.({ speaker, text, ts: Date.now() });
     }
 
@@ -196,8 +236,18 @@ export class GeminiLiveSession {
   }
 
   stop() {
+    this.log("session:stop");
     this.workletNode?.disconnect();
     this.mediaStream?.getTracks().forEach((track) => track.stop());
     this.socket?.close();
+  }
+
+  log(label: string, detail?: unknown) {
+    if (!this.debug) return;
+    if (detail === undefined) {
+      console.log(`[GeminiLive] ${label}`);
+      return;
+    }
+    console.log(`[GeminiLive] ${label}`, detail);
   }
 }
