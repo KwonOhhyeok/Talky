@@ -1,3 +1,5 @@
+import { DEFAULT_SYSTEM_INSTRUCTION } from "../config/systemPrompt";
+
 export type TranscriptEntry = {
   speaker: string;
   text: string;
@@ -8,6 +10,7 @@ export type GeminiLiveOptions = {
   apiVersion?: "v1alpha" | "v1beta";
   modelId?: string;
   model?: string;
+  systemInstruction?: string;
   outputSampleRate?: number;
   debug?: boolean;
   onTranscript?: (entry: TranscriptEntry) => void;
@@ -33,6 +36,7 @@ export class GeminiLiveSession {
   apiVersion: "v1alpha" | "v1beta";
   modelId?: string;
   model: string;
+  systemInstruction: string;
   outputSampleRate: number;
   inputSampleRate = 16000;
   debug: boolean;
@@ -64,6 +68,8 @@ export class GeminiLiveSession {
     this.apiVersion = options.apiVersion || "v1alpha";
     this.model =
       options.model || "gemini-2.5-flash-native-audio-preview-12-2025";
+    this.systemInstruction =
+      options.systemInstruction || DEFAULT_SYSTEM_INSTRUCTION;
     this.outputSampleRate = options.outputSampleRate || 24000;
     this.debug = options.debug ?? true;
     this.onTranscript = options.onTranscript;
@@ -182,6 +188,9 @@ export class GeminiLiveSession {
     const payload = {
       setup: {
         model,
+        systemInstruction: {
+          parts: [{ text: this.systemInstruction }],
+        },
         generationConfig: {
           responseModalities: ["AUDIO"],
         },
