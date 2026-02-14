@@ -27,6 +27,7 @@ export class GeminiLiveSession {
   modelId?: string;
   model: string;
   outputSampleRate: number;
+  inputSampleRate = 16000;
   debug: boolean;
   audioChunkCount = 0;
   onTranscript?: (entry: TranscriptEntry) => void;
@@ -78,9 +79,16 @@ export class GeminiLiveSession {
       if (!this.socket) return;
       this.socket.onopen = () => {
         this.log("ws:open");
-        this.sendConfig();
-        this.onStatus?.("connected");
-        resolve();
+        try {
+          this.sendConfig();
+          this.onStatus?.("connected");
+          resolve();
+        } catch (err) {
+          this.log("ws:setup-error", err);
+          this.onStatus?.("error");
+          this.socket?.close();
+          reject(err);
+        }
       };
       this.socket.onerror = (err) => {
         this.log("ws:error", err);
@@ -105,6 +113,7 @@ export class GeminiLiveSession {
       this.outputGain = this.audioContext.createGain();
       this.outputGain.gain.value = 1;
       this.outputGain.connect(this.audioContext.destination);
+      this.inputSampleRate = this.audioContext.sampleRate;
       this.log("audio:context-created", {
         sampleRate: this.audioContext.sampleRate,
       });
@@ -142,7 +151,7 @@ export class GeminiLiveSession {
 
   sendConfig() {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
-    const model = this.modelId || this.model;
+    const model = this.normalizeModel(this.modelId || this.model);
     const payload = {
       setup: {
         model,
@@ -165,21 +174,40 @@ export class GeminiLiveSession {
         bytes: pcm16.byteLength,
       });
     }
-    this.socket.send(pcm16);
+    const bytes = new Uint8Array(pcm16);
+    const message = {
+      realtimeInput: {
+        audio: {
+          data: this.base64FromBytes(bytes),
+          mimeType: `audio/pcm;rate=${this.inputSampleRate}`,
+        },
+      },
+    };
+    this.socket.send(JSON.stringify(message));
   }
 
   handleMessage(event: MessageEvent) {
-    if (typeof event.data !== "string") {
-      this.log("ws:message-nonjson", { type: typeof event.data });
+    if (typeof event.data === "string") {
+      this.handleJsonMessage(event.data);
       return;
     }
+    if (event.data instanceof Blob) {
+      event.data
+        .text()
+        .then((text) => this.handleJsonMessage(text))
+        .catch(() => this.log("ws:message-blob-read-error"));
+      return;
+    }
+    this.log("ws:message-nonjson", { type: typeof event.data });
+  }
 
+  handleJsonMessage(raw: string) {
     let msg: any = null;
     try {
-      msg = JSON.parse(event.data);
+      msg = JSON.parse(raw);
     } catch (err) {
       this.log("ws:message-parse-error", {
-        preview: event.data.slice(0, 200),
+        preview: raw.slice(0, 200),
       });
       return;
     }
@@ -187,19 +215,33 @@ export class GeminiLiveSession {
     if (!msg) return;
     this.log("ws:message", { keys: Object.keys(msg) });
 
-    if (msg.transcript || msg.text) {
-      const text = msg.transcript || msg.text;
-      const speakerRaw = msg.speaker || msg.role || "model";
-      const speaker = String(speakerRaw).toLowerCase();
-      this.log("transcript", { speaker, textPreview: String(text).slice(0, 120) });
-      this.onTranscript?.({ speaker, text, ts: Date.now() });
+    const inputTx = msg.serverContent?.inputTranscription?.text;
+    if (inputTx) {
+      this.log("transcript", { speaker: "user", textPreview: String(inputTx).slice(0, 120) });
+      this.onTranscript?.({ speaker: "user", text: inputTx, ts: Date.now() });
     }
 
-    const audioPayload = msg.audio || (msg.response && msg.response.audio);
-    if (audioPayload) {
-      const base64 = audioPayload.data || audioPayload;
-      if (typeof base64 === "string") {
-        this.playAudio(base64);
+    const outputTx = msg.serverContent?.outputTranscription?.text;
+    if (outputTx) {
+      this.log("transcript", { speaker: "model", textPreview: String(outputTx).slice(0, 120) });
+      this.onTranscript?.({ speaker: "model", text: outputTx, ts: Date.now() });
+    }
+
+    const parts = msg.serverContent?.modelTurn?.parts;
+    if (Array.isArray(parts)) {
+      for (const part of parts) {
+        const base64 = part?.inlineData?.data;
+        const mimeType = part?.inlineData?.mimeType || "";
+        if (typeof base64 === "string" && mimeType.startsWith("audio/pcm")) {
+          this.playAudio(base64);
+        }
+        if (typeof part?.text === "string" && part.text.trim()) {
+          this.onTranscript?.({
+            speaker: "model",
+            text: part.text,
+            ts: Date.now(),
+          });
+        }
       }
     }
   }
@@ -235,6 +277,14 @@ export class GeminiLiveSession {
     return new Int16Array(bytes.buffer);
   }
 
+  base64FromBytes(bytes: Uint8Array) {
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 1) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
   stop() {
     this.log("session:stop");
     this.workletNode?.disconnect();
@@ -249,5 +299,19 @@ export class GeminiLiveSession {
       return;
     }
     console.log(`[GeminiLive] ${label}`, detail);
+  }
+
+  normalizeModel(rawModel: string) {
+    const model = rawModel.trim();
+    if (!model) throw new Error("Missing model id");
+    if (model.startsWith("projects/")) {
+      throw new Error(
+        "Project-scoped model paths are not supported with ephemeral token auth. Use a public Gemini model id."
+      );
+    }
+    if (model.startsWith("models/")) {
+      return model;
+    }
+    return `models/${model}`;
   }
 }

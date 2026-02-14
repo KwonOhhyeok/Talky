@@ -32,7 +32,13 @@
         />
       </label>
       <div style="display: flex; gap: 12px; margin-top: 12px;">
-        <button class="primary-btn" @click="startCall">Connect</button>
+        <button
+          class="primary-btn"
+          :disabled="status === 'connecting'"
+          @click="startCall"
+        >
+          {{ status === "connecting" ? "Connecting..." : "Connect" }}
+        </button>
         <button class="secondary-btn" @click="resetSession">New session</button>
       </div>
       <div class="analysis-box" style="margin-top: 16px;">
@@ -62,8 +68,9 @@ const modelId = ref(
   localStorage.getItem("talky:model_id") ||
     "gemini-2.5-flash-native-audio-preview-12-2025"
 );
-const apiBase =
-  "https://ephemeral-token-service-399277644361.asia-northeast3.run.app";
+const tokenApiUrl = import.meta.env.DEV
+  ? "/api/ephemeral-token"
+  : "https://ephemeral-token-service-399277644361.asia-northeast3.run.app/api/ephemeral-token";
 const sessionId = ref(
   localStorage.getItem("talky:last_session_id") ||
     (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
@@ -109,15 +116,18 @@ async function startCall() {
     isSettingsOpen.value = true;
     return;
   }
-  if (status.value === "live") return;
+  if (status.value === "live" || status.value === "connecting") return;
   status.value = "connecting";
   try {
     localStorage.setItem("talky:model_id", modelId.value);
     localStorage.setItem("talky:last_session_id", sessionId.value);
-    const response = await fetch(`${apiBase}/api/ephemeral-token`, {
+    const response = await fetch(tokenApiUrl, {
       method: "POST",
     });
-    if (!response.ok) throw new Error("Token request failed");
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => "");
+      throw new Error(`Token request failed (${response.status}): ${bodyText}`);
+    }
     const data = await response.json();
     await session.connect({
       modelId: modelId.value,
@@ -126,6 +136,7 @@ async function startCall() {
     await session.startMic();
     startTimer();
   } catch (err) {
+    console.error("[CallScreen] startCall failed", err);
     status.value = "error";
   }
 }
