@@ -40,6 +40,7 @@
           {{ status === "connecting" ? "Connecting..." : "Connect" }}
         </button>
         <button class="secondary-btn" @click="resetSession">New session</button>
+        <button class="secondary-btn" @click="playLastTts">Play Last TTS</button>
       </div>
       <div class="analysis-box" style="margin-top: 16px;">
         {{ analysis || "End the call to request analysis." }}
@@ -54,6 +55,7 @@ import Avatar from "./Avatar.vue";
 import ControlBar from "./ControlBar.vue";
 import ChatPanel from "./ChatPanel.vue";
 import { GeminiLiveSession } from "../services/geminiLive";
+import { SessionArchive } from "../services/sessionArchive";
 
 const timer = ref("00:00");
 const seconds = ref(0);
@@ -68,9 +70,10 @@ const modelId = ref(
   localStorage.getItem("talky:model_id") ||
     "gemini-2.5-flash-native-audio-preview-12-2025"
 );
-const tokenApiUrl = import.meta.env.DEV
-  ? "/api/ephemeral-token"
-  : "https://ephemeral-token-service-399277644361.asia-northeast3.run.app/api/ephemeral-token";
+const apiBase = import.meta.env.DEV
+  ? ""
+  : "https://ephemeral-token-service-399277644361.asia-northeast3.run.app";
+const tokenApiUrl = `${apiBase}/api/ephemeral-token`;
 const analysisApiUrl = "";
 const sessionId = ref(
   localStorage.getItem("talky:last_session_id") ||
@@ -78,6 +81,14 @@ const sessionId = ref(
 );
 const conversationLog = ref(loadLog(sessionId.value));
 const analysis = ref("");
+const archiveReady = ref(false);
+
+const archive = new SessionArchive({
+  apiBase,
+  onError: (err) => {
+    console.error("[Archive] upload failed", err);
+  },
+});
 
 const session = new GeminiLiveSession({
   modelId: modelId.value,
@@ -85,6 +96,10 @@ const session = new GeminiLiveSession({
   onTranscript: (entry) => {
     conversationLog.value.push(entry);
     saveLog(sessionId.value, conversationLog.value);
+    archive.ingestTranscript(entry);
+  },
+  onModelAudioChunk: (chunk) => {
+    archive.ingestModelAudio(chunk);
   },
   onStatus: (state) => {
     if (state === "connected") status.value = "live";
@@ -122,6 +137,8 @@ async function startCall() {
   try {
     localStorage.setItem("talky:model_id", modelId.value);
     localStorage.setItem("talky:last_session_id", sessionId.value);
+    await archive.createSession(modelId.value);
+    archiveReady.value = true;
     const response = await fetch(tokenApiUrl, {
       method: "POST",
     });
@@ -147,6 +164,13 @@ async function endCall() {
   stopTimer();
   status.value = "ended";
   speaking.value = false;
+  if (archiveReady.value) {
+    try {
+      await archive.finalize(modelId.value);
+    } catch (err) {
+      console.error("[Archive] finalize failed", err);
+    }
+  }
   await analyzeConversation();
 }
 
@@ -193,6 +217,19 @@ function resetSession() {
   sessionId.value =
     crypto.randomUUID?.() || `session-${Date.now().toString(36)}`;
   saveLog(sessionId.value, conversationLog.value);
+  archiveReady.value = false;
+}
+
+async function playLastTts() {
+  try {
+    const ok = await archive.playLastModelAudio();
+    if (!ok) {
+      analysis.value = "No recorded model audio found yet.";
+    }
+  } catch (err) {
+    console.error("[Archive] playback failed", err);
+    analysis.value = "Playback failed.";
+  }
 }
 
 onBeforeUnmount(() => {

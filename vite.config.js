@@ -6,7 +6,7 @@ export default defineConfig({
   base: "./",
   server: {
     proxy: {
-      "/api/ephemeral-token": {
+      "/api": {
         target:
           "https://ephemeral-token-service-399277644361.asia-northeast3.run.app",
         changeOrigin: true,

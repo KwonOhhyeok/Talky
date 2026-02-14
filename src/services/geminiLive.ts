@@ -11,6 +11,11 @@ export type GeminiLiveOptions = {
   outputSampleRate?: number;
   debug?: boolean;
   onTranscript?: (entry: TranscriptEntry) => void;
+  onModelAudioChunk?: (chunk: {
+    base64: string;
+    mimeType: string;
+    ts: number;
+  }) => void;
   onStatus?: (status: string) => void;
   onAudioStart?: () => void;
   onAudioEnd?: () => void;
@@ -39,6 +44,11 @@ export class GeminiLiveSession {
   outputSources = new Set<AudioBufferSourceNode>();
   readonly playbackLeadSeconds = 0.03;
   onTranscript?: (entry: TranscriptEntry) => void;
+  onModelAudioChunk?: (chunk: {
+    base64: string;
+    mimeType: string;
+    ts: number;
+  }) => void;
   onStatus?: (status: string) => void;
   onAudioStart?: () => void;
   onAudioEnd?: () => void;
@@ -51,6 +61,7 @@ export class GeminiLiveSession {
     this.outputSampleRate = options.outputSampleRate || 24000;
     this.debug = options.debug ?? true;
     this.onTranscript = options.onTranscript;
+    this.onModelAudioChunk = options.onModelAudioChunk;
     this.onStatus = options.onStatus;
     this.onAudioStart = options.onAudioStart;
     this.onAudioEnd = options.onAudioEnd;
@@ -166,6 +177,8 @@ export class GeminiLiveSession {
         generationConfig: {
           responseModalities: ["AUDIO"],
         },
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
         realtimeInputConfig: {
           automaticActivityDetection: {
             disabled: false,
@@ -233,6 +246,11 @@ export class GeminiLiveSession {
 
     if (bytes.byteLength >= 2 && bytes.byteLength % 2 === 0) {
       this.log("ws:message-binary-audio", { bytes: bytes.byteLength });
+      this.onModelAudioChunk?.({
+        base64: this.base64FromBytes(bytes),
+        mimeType: `audio/pcm;rate=${this.outputSampleRate}`,
+        ts: Date.now(),
+      });
       this.playAudioFromBytes(bytes);
       return;
     }
@@ -291,6 +309,11 @@ export class GeminiLiveSession {
         const base64 = inlineData?.data;
         const mimeType = inlineData?.mimeType || inlineData?.mime_type || "";
         if (typeof base64 === "string" && mimeType.startsWith("audio/pcm")) {
+          this.onModelAudioChunk?.({
+            base64,
+            mimeType,
+            ts: Date.now(),
+          });
           const sampleRate = this.parseRateFromMimeType(mimeType);
           this.playAudio(base64, sampleRate);
         }
