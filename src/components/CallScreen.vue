@@ -71,6 +71,7 @@ const modelId = ref(
 const tokenApiUrl = import.meta.env.DEV
   ? "/api/ephemeral-token"
   : "https://ephemeral-token-service-399277644361.asia-northeast3.run.app/api/ephemeral-token";
+const analysisApiUrl = "";
 const sessionId = ref(
   localStorage.getItem("talky:last_session_id") ||
     (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
@@ -164,8 +165,12 @@ async function analyzeConversation() {
     analysis.value = "No transcript captured.";
     return;
   }
+  if (!analysisApiUrl) {
+    analysis.value = "Analysis backend is not configured.";
+    return;
+  }
   try {
-    const response = await fetch("/api/analyze", {
+    const response = await fetch(analysisApiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

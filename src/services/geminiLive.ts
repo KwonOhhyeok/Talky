@@ -30,6 +30,14 @@ export class GeminiLiveSession {
   inputSampleRate = 16000;
   debug: boolean;
   audioChunkCount = 0;
+  audioPacketCount = 0;
+  pendingAudioChunks: Uint8Array[] = [];
+  pendingAudioBytes = 0;
+  readonly minAudioPacketBytes = 2048;
+  nextPlaybackTime = 0;
+  activeOutputSources = 0;
+  outputSources = new Set<AudioBufferSourceNode>();
+  readonly playbackLeadSeconds = 0.03;
   onTranscript?: (entry: TranscriptEntry) => void;
   onStatus?: (status: string) => void;
   onAudioStart?: () => void;
@@ -158,6 +166,16 @@ export class GeminiLiveSession {
         generationConfig: {
           responseModalities: ["AUDIO"],
         },
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            disabled: false,
+            startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
+            endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
+            prefixPaddingMs: 40,
+            silenceDurationMs: 220,
+          },
+          activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
+        },
       },
     };
     this.log("ws:send-setup", payload);
@@ -168,22 +186,18 @@ export class GeminiLiveSession {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
     if (this.muted) return;
     this.audioChunkCount += 1;
-    if (this.audioChunkCount % 50 === 0) {
+    if (this.audioChunkCount % 500 === 0) {
       this.log("audio:chunk-sent", {
         count: this.audioChunkCount,
         bytes: pcm16.byteLength,
       });
     }
+
     const bytes = new Uint8Array(pcm16);
-    const message = {
-      realtimeInput: {
-        audio: {
-          data: this.base64FromBytes(bytes),
-          mimeType: `audio/pcm;rate=${this.inputSampleRate}`,
-        },
-      },
-    };
-    this.socket.send(JSON.stringify(message));
+    this.pendingAudioChunks.push(bytes);
+    this.pendingAudioBytes += bytes.byteLength;
+    if (this.pendingAudioBytes < this.minAudioPacketBytes) return;
+    this.flushPendingAudio();
   }
 
   handleMessage(event: MessageEvent) {
@@ -198,7 +212,37 @@ export class GeminiLiveSession {
         .catch(() => this.log("ws:message-blob-read-error"));
       return;
     }
-    this.log("ws:message-nonjson", { type: typeof event.data });
+    if (event.data instanceof ArrayBuffer) {
+      this.handleArrayBufferMessage(event.data);
+      return;
+    }
+    this.log("ws:message-nonjson", {
+      type: typeof event.data,
+      constructor: event.data?.constructor?.name,
+    });
+  }
+
+  handleArrayBufferMessage(buffer: ArrayBuffer) {
+    const bytes = new Uint8Array(buffer);
+    const decoded = new TextDecoder("utf-8").decode(bytes);
+    const trimmed = decoded.trim();
+    if (trimmed.startsWith("{")) {
+      this.handleJsonMessage(trimmed);
+      return;
+    }
+
+    if (bytes.byteLength >= 2 && bytes.byteLength % 2 === 0) {
+      this.log("ws:message-binary-audio", { bytes: bytes.byteLength });
+      this.playAudioFromBytes(bytes);
+      return;
+    }
+
+    this.log("ws:message-binary-unknown", {
+      bytes: bytes.byteLength,
+      previewHex: Array.from(bytes.slice(0, 16))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join(" "),
+    });
   }
 
   handleJsonMessage(raw: string) {
@@ -215,25 +259,40 @@ export class GeminiLiveSession {
     if (!msg) return;
     this.log("ws:message", { keys: Object.keys(msg) });
 
-    const inputTx = msg.serverContent?.inputTranscription?.text;
+    const serverContent = msg.serverContent || msg.server_content;
+    const inputTranscription =
+      serverContent?.inputTranscription || serverContent?.input_transcription;
+    const outputTranscription =
+      serverContent?.outputTranscription || serverContent?.output_transcription;
+    const modelTurn = serverContent?.modelTurn || serverContent?.model_turn;
+
+    if (serverContent?.interrupted === true) {
+      this.clearPlaybackQueue("server-interrupted");
+    }
+
+    const topInputTx = msg.inputTranscription || msg.input_transcription;
+    const topOutputTx = msg.outputTranscription || msg.output_transcription;
+    const inputTx = inputTranscription?.text || topInputTx?.text;
     if (inputTx) {
       this.log("transcript", { speaker: "user", textPreview: String(inputTx).slice(0, 120) });
       this.onTranscript?.({ speaker: "user", text: inputTx, ts: Date.now() });
     }
 
-    const outputTx = msg.serverContent?.outputTranscription?.text;
+    const outputTx = outputTranscription?.text || topOutputTx?.text;
     if (outputTx) {
       this.log("transcript", { speaker: "model", textPreview: String(outputTx).slice(0, 120) });
       this.onTranscript?.({ speaker: "model", text: outputTx, ts: Date.now() });
     }
 
-    const parts = msg.serverContent?.modelTurn?.parts;
+    const parts = modelTurn?.parts;
     if (Array.isArray(parts)) {
       for (const part of parts) {
-        const base64 = part?.inlineData?.data;
-        const mimeType = part?.inlineData?.mimeType || "";
+        const inlineData = part?.inlineData || part?.inline_data;
+        const base64 = inlineData?.data;
+        const mimeType = inlineData?.mimeType || inlineData?.mime_type || "";
         if (typeof base64 === "string" && mimeType.startsWith("audio/pcm")) {
-          this.playAudio(base64);
+          const sampleRate = this.parseRateFromMimeType(mimeType);
+          this.playAudio(base64, sampleRate);
         }
         if (typeof part?.text === "string" && part.text.trim()) {
           this.onTranscript?.({
@@ -246,25 +305,57 @@ export class GeminiLiveSession {
     }
   }
 
-  playAudio(base64: string) {
+  playAudio(base64: string, sampleRate?: number) {
     if (!this.audioContext || !this.outputGain) return;
     const pcm16 = this.decodeBase64ToInt16(base64);
+    this.playPcm16(pcm16, sampleRate || this.outputSampleRate);
+  }
+
+  playAudioFromBytes(bytes: Uint8Array, sampleRate?: number) {
+    const pcm16 = new Int16Array(
+      bytes.buffer,
+      bytes.byteOffset,
+      Math.floor(bytes.byteLength / 2)
+    );
+    this.playPcm16(pcm16, sampleRate || this.outputSampleRate);
+  }
+
+  playPcm16(pcm16: Int16Array, sampleRate: number) {
+    if (!this.audioContext || !this.outputGain) return;
     const audioBuffer = this.audioContext.createBuffer(
       1,
       pcm16.length,
-      this.outputSampleRate
+      sampleRate
     );
     const channel = audioBuffer.getChannelData(0);
     for (let i = 0; i < pcm16.length; i += 1) {
       channel[i] = pcm16[i] / 32768;
     }
+    this.applyEdgeFade(channel);
 
     const source = this.audioContext.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(this.outputGain);
-    source.onended = () => this.onAudioEnd?.();
-    this.onAudioStart?.();
-    source.start();
+    this.outputSources.add(source);
+    if (this.activeOutputSources === 0) {
+      this.onAudioStart?.();
+    }
+    this.activeOutputSources += 1;
+    source.onended = () => {
+      this.outputSources.delete(source);
+      this.activeOutputSources -= 1;
+      if (this.activeOutputSources <= 0) {
+        this.activeOutputSources = 0;
+        this.onAudioEnd?.();
+      }
+    };
+
+    const now = this.audioContext.currentTime;
+    if (this.nextPlaybackTime < now + this.playbackLeadSeconds) {
+      this.nextPlaybackTime = now + this.playbackLeadSeconds;
+    }
+    source.start(this.nextPlaybackTime);
+    this.nextPlaybackTime += audioBuffer.duration;
   }
 
   decodeBase64ToInt16(base64: string) {
@@ -285,8 +376,84 @@ export class GeminiLiveSession {
     return btoa(binary);
   }
 
+  parseRateFromMimeType(mimeType: string) {
+    const match = mimeType.match(/rate=(\d+)/i);
+    if (!match) return undefined;
+    const value = Number(match[1]);
+    if (!Number.isFinite(value) || value <= 0) return undefined;
+    return value;
+  }
+
+  applyEdgeFade(channel: Float32Array) {
+    const fadeSamples = Math.min(32, Math.floor(channel.length / 2));
+    if (fadeSamples <= 0) return;
+    for (let i = 0; i < fadeSamples; i += 1) {
+      const gainIn = i / fadeSamples;
+      const gainOut = (fadeSamples - i) / fadeSamples;
+      channel[i] *= gainIn;
+      channel[channel.length - 1 - i] *= gainOut;
+    }
+  }
+
+  flushPendingAudio() {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+    if (!this.pendingAudioBytes) return;
+    const merged = new Uint8Array(this.pendingAudioBytes);
+    let offset = 0;
+    for (const chunk of this.pendingAudioChunks) {
+      merged.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    this.pendingAudioChunks = [];
+    this.pendingAudioBytes = 0;
+
+    const message = {
+      realtimeInput: {
+        audio: {
+          data: this.base64FromBytes(merged),
+          mimeType: `audio/pcm;rate=${this.inputSampleRate}`,
+        },
+      },
+    };
+    this.audioPacketCount += 1;
+    if (this.audioPacketCount % 20 === 0) {
+      this.log("audio:packet-sent", {
+        packets: this.audioPacketCount,
+        bytes: merged.byteLength,
+      });
+    }
+    this.socket.send(JSON.stringify(message));
+  }
+
+  clearPlaybackQueue(reason: string) {
+    this.log("audio:queue-clear", {
+      reason,
+      queuedSources: this.outputSources.size,
+    });
+    for (const source of Array.from(this.outputSources)) {
+      source.onended = null;
+      try {
+        source.stop(0);
+      } catch {
+        // Already stopped.
+      }
+    }
+    this.outputSources.clear();
+    if (this.activeOutputSources > 0) {
+      this.activeOutputSources = 0;
+      this.onAudioEnd?.();
+    }
+    if (this.audioContext) {
+      this.nextPlaybackTime = this.audioContext.currentTime;
+    } else {
+      this.nextPlaybackTime = 0;
+    }
+  }
+
   stop() {
     this.log("session:stop");
+    this.flushPendingAudio();
+    this.clearPlaybackQueue("session-stop");
     this.workletNode?.disconnect();
     this.mediaStream?.getTracks().forEach((track) => track.stop());
     this.socket?.close();
