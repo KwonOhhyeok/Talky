@@ -1,18 +1,18 @@
 <template>
   <div class="call-screen">
     <header class="top-bar">
-      <span class="timer">{{ timer }}</span>
+      <span class="meta-chip timer-chip">{{ timer }}</span>
+      <span class="brand">Talky Live</span>
+      <span class="meta-chip status-chip">
+        <span class="status-dot" :class="{ live: status === 'live' }"></span>
+        {{ status }}
+      </span>
     </header>
-
-    <span class="status-pill">
-      <span class="status-dot" :class="{ live: status === 'live' }"></span>
-      {{ status }}
-    </span>
-
-    <Avatar :speaking="speaking" />
+    <Avatar :speaking="isModelSpeaking" :listening="isUserSpeaking" />
 
     <ControlBar
-      @hangup="endCall"
+      :call-active="isCallActive"
+      @toggleCall="toggleCall"
       @toggleChat="toggleChat"
       @toggleMenu="toggleMenu"
     />
@@ -24,25 +24,11 @@
         <span>Session Settings</span>
         <button class="secondary-btn" @click="toggleMenu">Close</button>
       </div>
-      <label class="field">
-        Model ID
-        <input
-          v-model="modelId"
-          placeholder="gemini-2.5-flash-native-audio-preview-12-2025"
-        />
-      </label>
-      <div style="display: flex; gap: 12px; margin-top: 12px;">
-        <button
-          class="primary-btn"
-          :disabled="status === 'connecting'"
-          @click="startCall"
-        >
-          {{ status === "connecting" ? "Connecting..." : "Connect" }}
-        </button>
+      <div class="settings-actions">
         <button class="secondary-btn" @click="resetSession">New session</button>
         <button class="secondary-btn" @click="playLastTts">Play Last TTS</button>
       </div>
-      <div class="analysis-box" style="margin-top: 16px;">
+      <div class="analysis-box">
         {{ analysis || "End the call to request analysis." }}
       </div>
     </section>
@@ -50,7 +36,7 @@
 </template>
 
 <script setup>
-import { ref, onBeforeUnmount } from "vue";
+import { ref, computed, onBeforeUnmount } from "vue";
 import Avatar from "./Avatar.vue";
 import ControlBar from "./ControlBar.vue";
 import ChatPanel from "./ChatPanel.vue";
@@ -60,16 +46,15 @@ import { SessionArchive } from "../services/sessionArchive";
 const timer = ref("00:00");
 const seconds = ref(0);
 let timerId = null;
+let callRequestSeq = 0;
 
 const isChatOpen = ref(false);
 const isSettingsOpen = ref(false);
-const speaking = ref(false);
+const isModelSpeaking = ref(false);
+const isUserSpeaking = ref(false);
 const status = ref("idle");
 
-const modelId = ref(
-  localStorage.getItem("talky:model_id") ||
-    "gemini-2.5-flash-native-audio-preview-12-2025"
-);
+const FIXED_MODEL_ID = "gemini-2.5-flash-native-audio-preview-12-2025";
 const apiBase = import.meta.env.DEV
   ? ""
   : "https://ephemeral-token-service-399277644361.asia-northeast3.run.app";
@@ -91,7 +76,7 @@ const archive = new SessionArchive({
 });
 
 const session = new GeminiLiveSession({
-  modelId: modelId.value,
+  modelId: FIXED_MODEL_ID,
   apiVersion: "v1alpha",
   onTranscript: (entry) => {
     conversationLog.value.push(entry);
@@ -103,15 +88,30 @@ const session = new GeminiLiveSession({
   },
   onStatus: (state) => {
     if (state === "connected") status.value = "live";
-    if (state === "closed") status.value = "closed";
+    if (state === "closed") {
+      status.value = "closed";
+      isUserSpeaking.value = false;
+      isModelSpeaking.value = false;
+    }
   },
   onAudioStart: () => {
-    speaking.value = true;
+    isModelSpeaking.value = true;
+    isUserSpeaking.value = false;
   },
   onAudioEnd: () => {
-    speaking.value = false;
+    isModelSpeaking.value = false;
+  },
+  onUserSpeechStart: () => {
+    isUserSpeaking.value = true;
+  },
+  onUserSpeechEnd: () => {
+    isUserSpeaking.value = false;
   },
 });
+
+const isCallActive = computed(
+  () => status.value === "connecting" || status.value === "live"
+);
 
 function startTimer() {
   if (timerId) return;
@@ -128,50 +128,69 @@ function stopTimer() {
 }
 
 async function startCall() {
-  if (!modelId.value) {
-    isSettingsOpen.value = true;
-    return;
-  }
   if (status.value === "live" || status.value === "connecting") return;
+  const requestSeq = ++callRequestSeq;
   status.value = "connecting";
   try {
-    localStorage.setItem("talky:model_id", modelId.value);
     localStorage.setItem("talky:last_session_id", sessionId.value);
-    await archive.createSession(modelId.value);
+    await archive.createSession(FIXED_MODEL_ID);
+    if (requestSeq !== callRequestSeq) return;
     archiveReady.value = true;
     const response = await fetch(tokenApiUrl, {
       method: "POST",
     });
+    if (requestSeq !== callRequestSeq) return;
     if (!response.ok) {
       const bodyText = await response.text().catch(() => "");
       throw new Error(`Token request failed (${response.status}): ${bodyText}`);
     }
     const data = await response.json();
+    if (requestSeq !== callRequestSeq) return;
     await session.connect({
-      modelId: modelId.value,
+      modelId: FIXED_MODEL_ID,
       ephemeralToken: data.token,
     });
+    if (requestSeq !== callRequestSeq) {
+      session.stop();
+      return;
+    }
     await session.startMic();
+    if (requestSeq !== callRequestSeq) {
+      session.stop();
+      return;
+    }
     startTimer();
   } catch (err) {
     console.error("[CallScreen] startCall failed", err);
-    status.value = "error";
+    if (requestSeq === callRequestSeq) {
+      status.value = "error";
+    }
   }
 }
 
 async function endCall() {
+  callRequestSeq += 1;
   session.stop();
   stopTimer();
   status.value = "ended";
-  speaking.value = false;
+  isModelSpeaking.value = false;
+  isUserSpeaking.value = false;
   if (archiveReady.value) {
     try {
-      await archive.finalize(modelId.value);
+      await archive.finalize(FIXED_MODEL_ID);
     } catch (err) {
       console.error("[Archive] finalize failed", err);
     }
   }
   await analyzeConversation();
+}
+
+async function toggleCall() {
+  if (isCallActive.value) {
+    await endCall();
+    return;
+  }
+  await startCall();
 }
 
 function toggleChat() {

@@ -19,6 +19,8 @@ export type GeminiLiveOptions = {
   onStatus?: (status: string) => void;
   onAudioStart?: () => void;
   onAudioEnd?: () => void;
+  onUserSpeechStart?: () => void;
+  onUserSpeechEnd?: () => void;
 };
 
 export class GeminiLiveSession {
@@ -52,6 +54,10 @@ export class GeminiLiveSession {
   onStatus?: (status: string) => void;
   onAudioStart?: () => void;
   onAudioEnd?: () => void;
+  onUserSpeechStart?: () => void;
+  onUserSpeechEnd?: () => void;
+  userSpeaking = false;
+  userSpeechIdleTimer: number | null = null;
 
   constructor(options: GeminiLiveOptions = {}) {
     this.modelId = options.modelId;
@@ -65,6 +71,8 @@ export class GeminiLiveSession {
     this.onStatus = options.onStatus;
     this.onAudioStart = options.onAudioStart;
     this.onAudioEnd = options.onAudioEnd;
+    this.onUserSpeechStart = options.onUserSpeechStart;
+    this.onUserSpeechEnd = options.onUserSpeechEnd;
   }
 
   async connect({ modelId, ephemeralToken }: {
@@ -283,15 +291,33 @@ export class GeminiLiveSession {
     const outputTranscription =
       serverContent?.outputTranscription || serverContent?.output_transcription;
     const modelTurn = serverContent?.modelTurn || serverContent?.model_turn;
+    const activityStart =
+      serverContent?.activityStart ||
+      serverContent?.activity_start ||
+      serverContent?.inputActivityStart ||
+      serverContent?.input_activity_start;
+    const activityEnd =
+      serverContent?.activityEnd ||
+      serverContent?.activity_end ||
+      serverContent?.inputActivityEnd ||
+      serverContent?.input_activity_end;
 
     if (serverContent?.interrupted === true) {
       this.clearPlaybackQueue("server-interrupted");
+    }
+    if (activityStart) {
+      this.setUserSpeaking(true, "server-activity-start");
+    }
+    if (activityEnd) {
+      this.setUserSpeaking(false, "server-activity-end");
     }
 
     const topInputTx = msg.inputTranscription || msg.input_transcription;
     const topOutputTx = msg.outputTranscription || msg.output_transcription;
     const inputTx = inputTranscription?.text || topInputTx?.text;
     if (inputTx) {
+      this.setUserSpeaking(true, "input-transcription");
+      this.refreshUserSpeechIdleTimer();
       this.log("transcript", { speaker: "user", textPreview: String(inputTx).slice(0, 120) });
       this.onTranscript?.({ speaker: "user", text: inputTx, ts: Date.now() });
     }
@@ -361,6 +387,7 @@ export class GeminiLiveSession {
     source.connect(this.outputGain);
     this.outputSources.add(source);
     if (this.activeOutputSources === 0) {
+      this.setUserSpeaking(false, "model-audio-start");
       this.onAudioStart?.();
     }
     this.activeOutputSources += 1;
@@ -480,6 +507,32 @@ export class GeminiLiveSession {
     this.workletNode?.disconnect();
     this.mediaStream?.getTracks().forEach((track) => track.stop());
     this.socket?.close();
+    this.setUserSpeaking(false, "session-stop");
+    this.clearUserSpeechIdleTimer();
+  }
+
+  setUserSpeaking(next: boolean, reason: string) {
+    if (this.userSpeaking === next) return;
+    this.userSpeaking = next;
+    this.log("user:speaking", { value: next, reason });
+    if (next) {
+      this.onUserSpeechStart?.();
+      return;
+    }
+    this.onUserSpeechEnd?.();
+  }
+
+  refreshUserSpeechIdleTimer() {
+    this.clearUserSpeechIdleTimer();
+    this.userSpeechIdleTimer = window.setTimeout(() => {
+      this.setUserSpeaking(false, "input-idle-timeout");
+    }, 700);
+  }
+
+  clearUserSpeechIdleTimer() {
+    if (this.userSpeechIdleTimer === null) return;
+    window.clearTimeout(this.userSpeechIdleTimer);
+    this.userSpeechIdleTimer = null;
   }
 
   log(label: string, detail?: unknown) {
