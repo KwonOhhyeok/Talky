@@ -1,7 +1,12 @@
 <template>
   <div class="control-bar">
     <button class="circle" @click="$emit('toggleChat')" aria-label="Toggle chat">
-      <span aria-hidden="true">💬</span>
+      <img
+        class="circle-icon circle-icon-chat"
+        :src="chatIcon"
+        alt=""
+        aria-hidden="true"
+      />
     </button>
     <button
       class="circle hangup"
@@ -9,15 +14,29 @@
       @click="$emit('toggleCall')"
       :aria-label="callActive ? 'Stop call' : 'Start call'"
     >
-      <span aria-hidden="true">📞</span>
+      <img
+        class="circle-icon circle-icon-call"
+        :src="callIcon"
+        alt=""
+        aria-hidden="true"
+      />
     </button>
     <button class="circle" @click="$emit('toggleMenu')" aria-label="Settings">
-      <span aria-hidden="true">⚙️</span>
+      <img
+        class="circle-icon circle-icon-settings"
+        :src="settingsIcon"
+        alt=""
+        aria-hidden="true"
+      />
     </button>
   </div>
 </template>
 
 <script setup>
+import chatIcon from "../assets/images/chat.png";
+import callIcon from "../assets/images/call.png";
+import settingsIcon from "../assets/images/settings.png";
+
 defineProps({
   callActive: {
     type: Boolean,

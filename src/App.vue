@@ -11,5 +11,8 @@ import CallScreen from "./components/CallScreen.vue";
 <style scoped>
 .app-shell {
   width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 </style>
