@@ -176,14 +176,16 @@ async function endCall() {
   status.value = "ended";
   isModelSpeaking.value = false;
   isUserSpeaking.value = false;
-  if (archiveReady.value) {
-    try {
-      await archive.finalize(FIXED_MODEL_ID);
-    } catch (err) {
-      console.error("[Archive] finalize failed", err);
+  void (async () => {
+    if (archiveReady.value) {
+      try {
+        await archive.finalize(FIXED_MODEL_ID);
+      } catch (err) {
+        console.error("[Archive] finalize failed", err);
+      }
     }
-  }
-  await analyzeConversation();
+    await analyzeConversation();
+  })();
 }
 
 async function toggleCall() {

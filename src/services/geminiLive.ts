@@ -30,6 +30,11 @@ export class GeminiLiveSession {
   socket: WebSocket | null = null;
   audioContext: AudioContext | null = null;
   workletNode: AudioWorkletNode | null = null;
+  inputSource: MediaStreamAudioSourceNode | null = null;
+  inputSink: GainNode | null = null;
+  workletLoaded = false;
+  inputCaptureActive = false;
+  inputCaptureGeneration = 0;
   mediaStream: MediaStream | null = null;
   outputGain: GainNode | null = null;
   muted = false;
@@ -119,10 +124,12 @@ export class GeminiLiveSession {
 
     this.socket = new WebSocket(url);
     this.socket.binaryType = "arraybuffer";
+    const socket = this.socket;
 
     return new Promise<void>((resolve, reject) => {
-      if (!this.socket) return;
-      this.socket.onopen = () => {
+      if (!socket) return;
+      socket.onopen = () => {
+        if (this.socket !== socket) return;
         this.log("ws:open");
         try {
           this.sendConfig();
@@ -131,16 +138,18 @@ export class GeminiLiveSession {
         } catch (err) {
           this.log("ws:setup-error", err);
           this.onStatus?.("error");
-          this.socket?.close();
+          socket.close();
           reject(err);
         }
       };
-      this.socket.onerror = (err) => {
+      socket.onerror = (err) => {
+        if (this.socket !== socket) return;
         this.log("ws:error", err);
         this.onStatus?.("error");
         reject(err);
       };
-      this.socket.onclose = (event) => {
+      socket.onclose = (event) => {
+        if (this.socket !== socket) return;
         this.log("ws:close", {
           code: event.code,
           reason: event.reason,
@@ -148,7 +157,7 @@ export class GeminiLiveSession {
         });
         this.onStatus?.("closed");
       };
-      this.socket.onmessage = (event) => this.handleMessage(event);
+      socket.onmessage = (event) => this.handleMessage(event, socket);
     });
   }
 
@@ -163,30 +172,47 @@ export class GeminiLiveSession {
         sampleRate: this.audioContext.sampleRate,
       });
     }
+    if (this.audioContext.state === "suspended") {
+      await this.audioContext.resume();
+      this.log("audio:context-resumed", {
+        state: this.audioContext.state,
+      });
+    }
+
+    this.teardownInputCapture("start-mic-reset");
 
     this.mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
     });
     this.log("audio:mic-granted");
 
-    const workletUrl = new URL(
-      "./worklets/pcm-encoder-worklet.js",
-      import.meta.url
-    );
-    await this.audioContext.audioWorklet.addModule(workletUrl);
-    this.log("audio:worklet-loaded");
+    if (!this.workletLoaded) {
+      const workletUrl = new URL(
+        "./worklets/pcm-encoder-worklet.js",
+        import.meta.url
+      );
+      await this.audioContext.audioWorklet.addModule(workletUrl);
+      this.workletLoaded = true;
+      this.log("audio:worklet-loaded");
+    }
 
     const source = this.audioContext.createMediaStreamSource(this.mediaStream);
     const workletNode = new AudioWorkletNode(this.audioContext, "pcm-encoder");
     const muteGain = this.audioContext.createGain();
     muteGain.gain.value = 0;
+    const captureGeneration = ++this.inputCaptureGeneration;
+    this.inputCaptureActive = true;
 
     workletNode.port.onmessage = (event) => {
+      if (!this.inputCaptureActive) return;
+      if (captureGeneration !== this.inputCaptureGeneration) return;
       this.sendAudioChunk(event.data);
     };
 
     source.connect(workletNode);
     workletNode.connect(muteGain).connect(this.audioContext.destination);
+    this.inputSource = source;
+    this.inputSink = muteGain;
     this.workletNode = workletNode;
   }
 
@@ -225,6 +251,7 @@ export class GeminiLiveSession {
   }
 
   sendAudioChunk(pcm16: ArrayBuffer) {
+    if (!this.inputCaptureActive) return;
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
     if (this.muted) return;
     this.audioChunkCount += 1;
@@ -242,7 +269,8 @@ export class GeminiLiveSession {
     this.flushPendingAudio();
   }
 
-  handleMessage(event: MessageEvent) {
+  handleMessage(event: MessageEvent, socket?: WebSocket) {
+    if (socket && this.socket !== socket) return;
     if (typeof event.data === "string") {
       this.handleJsonMessage(event.data);
       return;
@@ -636,13 +664,42 @@ export class GeminiLiveSession {
 
   stop() {
     this.log("session:stop");
-    this.flushPendingAudio();
     this.clearPlaybackQueue("session-stop");
-    this.workletNode?.disconnect();
-    this.mediaStream?.getTracks().forEach((track) => track.stop());
+    this.teardownInputCapture("session-stop");
     this.socket?.close();
+    this.socket = null;
     this.setUserSpeaking(false, "session-stop");
     this.clearUserSpeechIdleTimer();
+  }
+
+  teardownInputCapture(reason: string) {
+    const hadInput =
+      this.inputCaptureActive ||
+      !!this.workletNode ||
+      !!this.inputSource ||
+      !!this.mediaStream;
+    this.inputCaptureActive = false;
+    this.inputCaptureGeneration += 1;
+    if (this.workletNode) {
+      this.workletNode.port.onmessage = null;
+      this.workletNode.disconnect();
+      this.workletNode = null;
+    }
+    if (this.inputSource) {
+      this.inputSource.disconnect();
+      this.inputSource = null;
+    }
+    if (this.inputSink) {
+      this.inputSink.disconnect();
+      this.inputSink = null;
+    }
+    this.mediaStream?.getTracks().forEach((track) => track.stop());
+    this.mediaStream = null;
+    this.pendingAudioChunks = [];
+    this.pendingAudioBytes = 0;
+    if (hadInput) {
+      this.log("audio:input-reset", { reason });
+    }
   }
 
   setUserSpeaking(next: boolean, reason: string) {
