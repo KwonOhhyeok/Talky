@@ -48,7 +48,19 @@ export class GeminiLiveSession {
   nextPlaybackTime = 0;
   activeOutputSources = 0;
   outputSources = new Set<AudioBufferSourceNode>();
-  readonly playbackLeadSeconds = 0.03;
+  readonly playbackLeadSeconds = 0.12;
+  readonly playbackStatsEveryChunks = 40;
+  readonly declickFadeSamples = 8;
+  readonly boundaryBlendSamples = 24;
+  playbackChunkCount = 0;
+  playbackUnderrunCount = 0;
+  playbackTinyChunkCount = 0;
+  modelAudioChunkCount = 0;
+  modelAudioTotalBytes = 0;
+  pendingFadeIn = true;
+  hasLastOutputSample = false;
+  lastOutputSample = 0;
+  lastPlaybackSampleRate: number | null = null;
   onTranscript?: (entry: TranscriptEntry) => void;
   onModelAudioChunk?: (chunk: {
     base64: string;
@@ -263,6 +275,7 @@ export class GeminiLiveSession {
 
     if (bytes.byteLength >= 2 && bytes.byteLength % 2 === 0) {
       this.log("ws:message-binary-audio", { bytes: bytes.byteLength });
+      this.recordModelAudioChunk(bytes.byteLength, this.outputSampleRate, "binary");
       this.onModelAudioChunk?.({
         base64: this.base64FromBytes(bytes),
         mimeType: `audio/pcm;rate=${this.outputSampleRate}`,
@@ -344,12 +357,18 @@ export class GeminiLiveSession {
         const base64 = inlineData?.data;
         const mimeType = inlineData?.mimeType || inlineData?.mime_type || "";
         if (typeof base64 === "string" && mimeType.startsWith("audio/pcm")) {
+          const sampleRate =
+            this.parseRateFromMimeType(mimeType) || this.outputSampleRate;
+          this.recordModelAudioChunk(
+            this.estimateBase64ByteLength(base64),
+            sampleRate,
+            "json"
+          );
           this.onModelAudioChunk?.({
             base64,
             mimeType,
             ts: Date.now(),
           });
-          const sampleRate = this.parseRateFromMimeType(mimeType);
           this.playAudio(base64, sampleRate);
         }
         if (typeof part?.text === "string" && part.text.trim()) {
@@ -370,6 +389,9 @@ export class GeminiLiveSession {
   }
 
   playAudioFromBytes(bytes: Uint8Array, sampleRate?: number) {
+    if (bytes.byteLength % 2 !== 0) {
+      this.log("audio:model-invalid-pcm-bytes", { bytes: bytes.byteLength });
+    }
     const pcm16 = new Int16Array(
       bytes.buffer,
       bytes.byteOffset,
@@ -380,6 +402,17 @@ export class GeminiLiveSession {
 
   playPcm16(pcm16: Int16Array, sampleRate: number) {
     if (!this.audioContext || !this.outputGain) return;
+    if (pcm16.length === 0) return;
+    if (this.lastPlaybackSampleRate !== sampleRate) {
+      this.lastPlaybackSampleRate = sampleRate;
+      this.pendingFadeIn = true;
+      this.hasLastOutputSample = false;
+      this.log("audio:playback-rate", {
+        sampleRate,
+        contextSampleRate: this.audioContext.sampleRate,
+      });
+    }
+
     const audioBuffer = this.audioContext.createBuffer(
       1,
       pcm16.length,
@@ -389,7 +422,8 @@ export class GeminiLiveSession {
     for (let i = 0; i < pcm16.length; i += 1) {
       channel[i] = pcm16[i] / 32768;
     }
-    this.applyEdgeFade(channel);
+    this.applyBoundarySmoothing(channel, this.pendingFadeIn);
+    this.pendingFadeIn = false;
 
     const source = this.audioContext.createBufferSource();
     source.buffer = audioBuffer;
@@ -410,11 +444,48 @@ export class GeminiLiveSession {
     };
 
     const now = this.audioContext.currentTime;
-    if (this.nextPlaybackTime < now + this.playbackLeadSeconds) {
-      this.nextPlaybackTime = now + this.playbackLeadSeconds;
+    let startAt = this.nextPlaybackTime;
+    const minStartAt = now + this.playbackLeadSeconds;
+    if (startAt < minStartAt) {
+      if (startAt > 0 && startAt < now) {
+        this.playbackUnderrunCount += 1;
+        this.pendingFadeIn = true;
+        this.hasLastOutputSample = false;
+        this.log("audio:playback-underrun", {
+          count: this.playbackUnderrunCount,
+          lagMs: this.toFixed((now - startAt) * 1000, 2),
+        });
+      }
+      startAt = minStartAt;
+      this.pendingFadeIn = true;
     }
-    source.start(this.nextPlaybackTime);
-    this.nextPlaybackTime += audioBuffer.duration;
+
+    source.start(startAt);
+    this.nextPlaybackTime = startAt + audioBuffer.duration;
+
+    this.playbackChunkCount += 1;
+    const chunkMs = audioBuffer.duration * 1000;
+    if (chunkMs < 12) {
+      this.playbackTinyChunkCount += 1;
+      this.log("audio:playback-tiny-chunk", {
+        samples: pcm16.length,
+        sampleRate,
+        chunkMs: this.toFixed(chunkMs, 2),
+      });
+    }
+    if (this.playbackChunkCount % this.playbackStatsEveryChunks === 0) {
+      this.log("audio:playback-stats", {
+        chunks: this.playbackChunkCount,
+        activeSources: this.activeOutputSources,
+        queueDepthMs: this.toFixed(
+          Math.max(0, (this.nextPlaybackTime - now) * 1000),
+          1
+        ),
+        lastChunkMs: this.toFixed(chunkMs, 2),
+        underruns: this.playbackUnderrunCount,
+        tinyChunks: this.playbackTinyChunkCount,
+      });
+    }
   }
 
   decodeBase64ToInt16(base64: string) {
@@ -424,7 +495,10 @@ export class GeminiLiveSession {
     for (let i = 0; i < len; i += 1) {
       bytes[i] = binaryString.charCodeAt(i);
     }
-    return new Int16Array(bytes.buffer);
+    if (bytes.byteLength % 2 !== 0) {
+      this.log("audio:model-invalid-pcm-bytes", { bytes: bytes.byteLength });
+    }
+    return new Int16Array(bytes.buffer, 0, Math.floor(bytes.byteLength / 2));
   }
 
   base64FromBytes(bytes: Uint8Array) {
@@ -443,15 +517,64 @@ export class GeminiLiveSession {
     return value;
   }
 
-  applyEdgeFade(channel: Float32Array) {
-    const fadeSamples = Math.min(32, Math.floor(channel.length / 2));
-    if (fadeSamples <= 0) return;
-    for (let i = 0; i < fadeSamples; i += 1) {
-      const gainIn = i / fadeSamples;
-      const gainOut = (fadeSamples - i) / fadeSamples;
-      channel[i] *= gainIn;
-      channel[channel.length - 1 - i] *= gainOut;
+  applyBoundarySmoothing(channel: Float32Array, fadeIn: boolean) {
+    const fadeSamples = Math.min(this.declickFadeSamples, channel.length);
+    if (fadeIn) {
+      for (let i = 0; i < fadeSamples; i += 1) {
+        channel[i] *= i / fadeSamples;
+      }
+    } else if (this.hasLastOutputSample) {
+      const blendSamples = Math.min(this.boundaryBlendSamples, channel.length);
+      for (let i = 0; i < blendSamples; i += 1) {
+        const t = (i + 1) / (blendSamples + 1);
+        channel[i] =
+          this.lastOutputSample + (channel[i] - this.lastOutputSample) * t;
+      }
     }
+    this.lastOutputSample = channel[channel.length - 1];
+    this.hasLastOutputSample = true;
+  }
+
+  recordModelAudioChunk(
+    bytes: number,
+    sampleRate: number,
+    transport: "json" | "binary"
+  ) {
+    this.modelAudioChunkCount += 1;
+    this.modelAudioTotalBytes += bytes;
+    const chunkMs = ((bytes / 2) * 1000) / sampleRate;
+    if (chunkMs < 12) {
+      this.log("audio:model-tiny-chunk", {
+        transport,
+        bytes,
+        sampleRate,
+        chunkMs: this.toFixed(chunkMs, 2),
+      });
+    }
+    if (this.modelAudioChunkCount % this.playbackStatsEveryChunks === 0) {
+      this.log("audio:model-stream-stats", {
+        transport,
+        chunks: this.modelAudioChunkCount,
+        avgBytes: Math.round(this.modelAudioTotalBytes / this.modelAudioChunkCount),
+        lastBytes: bytes,
+        sampleRate,
+        chunkMs: this.toFixed(chunkMs, 2),
+      });
+    }
+  }
+
+  estimateBase64ByteLength(base64: string) {
+    const len = base64.length;
+    if (!len) return 0;
+    let padding = 0;
+    if (base64.endsWith("==")) padding = 2;
+    else if (base64.endsWith("=")) padding = 1;
+    return Math.max(0, Math.floor((len * 3) / 4) - padding);
+  }
+
+  toFixed(value: number, digits: number) {
+    const factor = 10 ** digits;
+    return Math.round(value * factor) / factor;
   }
 
   flushPendingAudio() {
@@ -507,6 +630,8 @@ export class GeminiLiveSession {
     } else {
       this.nextPlaybackTime = 0;
     }
+    this.pendingFadeIn = true;
+    this.hasLastOutputSample = false;
   }
 
   stop() {

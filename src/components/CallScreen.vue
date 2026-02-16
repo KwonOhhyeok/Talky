@@ -53,6 +53,7 @@ const isSettingsOpen = ref(false);
 const isModelSpeaking = ref(false);
 const isUserSpeaking = ref(false);
 const status = ref("idle");
+const isCallTransitioning = ref(false);
 
 const FIXED_MODEL_ID = "gemini-2.5-flash-native-audio-preview-12-2025";
 const apiBase = import.meta.env.DEV
@@ -186,11 +187,17 @@ async function endCall() {
 }
 
 async function toggleCall() {
-  if (isCallActive.value) {
-    await endCall();
-    return;
+  if (isCallTransitioning.value) return;
+  isCallTransitioning.value = true;
+  try {
+    if (isCallActive.value) {
+      await endCall();
+      return;
+    }
+    await startCall();
+  } finally {
+    isCallTransitioning.value = false;
   }
-  await startCall();
 }
 
 function toggleChat() {

@@ -70,9 +70,10 @@ export class SessionArchive {
   }
 
   ingestTranscript(entry: { speaker: string; text: string; ts: number }) {
-    if (!this.session) return;
+    const session = this.session;
+    if (!session) return;
     const seq = ++this.transcriptSeq;
-    const path = `${this.session.prefix}/transcript/${this.pad(seq)}.json`;
+    const path = `${session.prefix}/transcript/${this.pad(seq)}.json`;
     const payload = {
       seq,
       speaker: entry.speaker,
@@ -88,16 +89,17 @@ export class SessionArchive {
     });
     const body = JSON.stringify(payload);
     this.enqueue(async () => {
-      await this.putObject(path, "application/json", body);
+      await this.putObject(session, path, "application/json", body);
     });
   }
 
   ingestModelAudio(chunk: { base64: string; mimeType: string; ts: number }) {
-    if (!this.session) return;
+    const session = this.session;
+    if (!session) return;
     const seq = ++this.audioSeq;
     const bytes = this.base64ToBytes(chunk.base64);
     const sampleRate = this.parseRate(chunk.mimeType) || 24000;
-    const path = `${this.session.prefix}/model-audio/${this.pad(seq)}.pcm`;
+    const path = `${session.prefix}/model-audio/${this.pad(seq)}.pcm`;
     this.audioChunks.push({
       seq,
       path,
@@ -107,31 +109,35 @@ export class SessionArchive {
       bytes: bytes.byteLength,
     });
     this.enqueue(async () => {
-      await this.putObject(path, "audio/pcm", bytes);
+      await this.putObject(session, path, "audio/pcm", bytes);
     });
   }
 
   async finalize(modelId: string) {
-    if (!this.session) return null;
-    await this.uploadQueue;
+    const session = this.session;
+    if (!session) return null;
+    const queueAtFinalize = this.uploadQueue;
+    const audioChunks = [...this.audioChunks];
+    const transcripts = [...this.transcripts];
+    await queueAtFinalize;
     const endedAt = new Date().toISOString();
     const manifest = {
       version: 1,
-      sessionId: this.session.sessionId,
-      bucket: this.session.bucket,
-      prefix: this.session.prefix,
+      sessionId: session.sessionId,
+      bucket: session.bucket,
+      prefix: session.prefix,
       modelId,
-      createdAt: this.session.createdAt,
+      createdAt: session.createdAt,
       endedAt,
-      audioChunks: [...this.audioChunks].sort((a, b) => a.seq - b.seq),
-      transcripts: [...this.transcripts].sort((a, b) => a.seq - b.seq),
+      audioChunks: audioChunks.sort((a, b) => a.seq - b.seq),
+      transcripts: transcripts.sort((a, b) => a.seq - b.seq),
       stats: {
-        audioChunkCount: this.audioChunks.length,
-        transcriptCount: this.transcripts.length,
+        audioChunkCount: audioChunks.length,
+        transcriptCount: transcripts.length,
       },
     };
 
-    const response = await fetch(this.session.manifestUploadUrl, {
+    const response = await fetch(session.manifestUploadUrl, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(manifest),
@@ -144,9 +150,9 @@ export class SessionArchive {
     localStorage.setItem(
       LOCAL_ARCHIVE_KEY,
       JSON.stringify({
-        manifestPath: this.session.manifestPath,
-        sessionId: this.session.sessionId,
-        readUrlEndpoint: this.session.readUrlEndpoint,
+        manifestPath: session.manifestPath,
+        sessionId: session.sessionId,
+        readUrlEndpoint: session.readUrlEndpoint,
         apiBase: this.apiBase,
       })
     );
@@ -237,9 +243,13 @@ export class SessionArchive {
       });
   }
 
-  async putObject(path: string, contentType: string, body: BodyInit) {
-    if (!this.session) throw new Error("Archive session is not initialized");
-    const uploadUrl = await this.fetchUploadUrl(path, contentType);
+  async putObject(
+    session: SessionCreateResponse,
+    path: string,
+    contentType: string,
+    body: BodyInit
+  ) {
+    const uploadUrl = await this.fetchUploadUrl(session, path, contentType);
     const response = await fetch(uploadUrl, {
       method: "PUT",
       headers: { "Content-Type": contentType },
@@ -250,9 +260,12 @@ export class SessionArchive {
     }
   }
 
-  async fetchUploadUrl(path: string, contentType: string) {
-    if (!this.session) throw new Error("Archive session is not initialized");
-    const response = await fetch(this.url(this.session.uploadUrlEndpoint), {
+  async fetchUploadUrl(
+    session: SessionCreateResponse,
+    path: string,
+    contentType: string
+  ) {
+    const response = await fetch(this.url(session.uploadUrlEndpoint), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path, contentType }),
