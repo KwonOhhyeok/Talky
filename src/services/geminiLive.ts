@@ -129,8 +129,25 @@ export class GeminiLiveSession {
 
     return new Promise<void>((resolve, reject) => {
       if (!socket) return;
+      let settled = false;
+      const connectTimeoutMs = 12000;
+      const timeoutId = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.log("ws:connect-timeout", { timeoutMs: connectTimeoutMs });
+        this.onStatus?.("error");
+        try {
+          socket.close();
+        } catch {
+          // noop
+        }
+        reject(new Error(`WebSocket connect timeout after ${connectTimeoutMs}ms`));
+      }, connectTimeoutMs);
       socket.onopen = () => {
         if (this.socket !== socket) return;
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
         this.log("ws:open");
         try {
           this.sendConfig();
@@ -145,12 +162,31 @@ export class GeminiLiveSession {
       };
       socket.onerror = (err) => {
         if (this.socket !== socket) return;
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
         this.log("ws:error", err);
         this.onStatus?.("error");
-        reject(err);
+        reject(new Error("WebSocket error before connection ready"));
       };
       socket.onclose = (event) => {
         if (this.socket !== socket) return;
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timeoutId);
+          this.log("ws:close-before-open", {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean,
+          });
+          this.onStatus?.("error");
+          reject(
+            new Error(
+              `WebSocket closed before ready (code=${event.code}, reason=${event.reason || "none"})`
+            )
+          );
+          return;
+        }
         this.log("ws:close", {
           code: event.code,
           reason: event.reason,

@@ -50,9 +50,10 @@ export class SessionArchive {
     this.onError = options.onError;
   }
 
-  async createSession(modelId: string) {
+  async createSession(modelId: string, signal?: AbortSignal) {
     const response = await fetch(this.url("/api/session/create"), {
       method: "POST",
+      signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ modelId }),
     });

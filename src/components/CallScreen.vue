@@ -70,6 +70,8 @@ const apiBase = import.meta.env.DEV
   : "https://ephemeral-token-service-399277644361.asia-northeast3.run.app";
 const tokenApiUrl = `${apiBase}/api/ephemeral-token`;
 const analysisApiUrl = "";
+const NETWORK_TIMEOUT_MS = 12000;
+const MIC_TIMEOUT_MS = 12000;
 const sessionId = ref(
   localStorage.getItem("talky:last_session_id") ||
     (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
@@ -139,18 +141,73 @@ function stopTimer() {
   timerId = null;
 }
 
+async function withTimeout(promise, timeoutMs, label) {
+  let timeoutId = null;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
+}
+
+async function postJsonWithTimeout(url, body, timeoutMs, label) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      signal: controller.signal,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return response;
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      throw new Error(`${label} timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 async function startCall() {
   if (status.value === "live" || status.value === "connecting") return;
   const requestSeq = ++callRequestSeq;
   status.value = "connecting";
   try {
+    console.log("[CallScreen] startCall:begin", { requestSeq });
     localStorage.setItem("talky:last_session_id", sessionId.value);
-    await archive.createSession(FIXED_MODEL_ID);
+    const createController = new AbortController();
+    const createTimeoutId = window.setTimeout(
+      () => createController.abort(),
+      NETWORK_TIMEOUT_MS
+    );
+    try {
+      console.log("[CallScreen] startCall:createSession");
+      await archive.createSession(FIXED_MODEL_ID, createController.signal);
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        throw new Error(`Session create timed out after ${NETWORK_TIMEOUT_MS}ms`);
+      }
+      throw err;
+    } finally {
+      window.clearTimeout(createTimeoutId);
+    }
     if (requestSeq !== callRequestSeq) return;
     archiveReady.value = true;
-    const response = await fetch(tokenApiUrl, {
-      method: "POST",
-    });
+    console.log("[CallScreen] startCall:tokenRequest");
+    const response = await postJsonWithTimeout(
+      tokenApiUrl,
+      null,
+      NETWORK_TIMEOUT_MS,
+      "Token request"
+    );
     if (requestSeq !== callRequestSeq) return;
     if (!response.ok) {
       const bodyText = await response.text().catch(() => "");
@@ -158,6 +215,7 @@ async function startCall() {
     }
     const data = await response.json();
     if (requestSeq !== callRequestSeq) return;
+    console.log("[CallScreen] startCall:connect");
     await session.connect({
       modelId: FIXED_MODEL_ID,
       ephemeralToken: data.token,
@@ -166,12 +224,14 @@ async function startCall() {
       session.stop();
       return;
     }
-    await session.startMic();
+    console.log("[CallScreen] startCall:startMic");
+    await withTimeout(session.startMic(), MIC_TIMEOUT_MS, "Microphone start");
     if (requestSeq !== callRequestSeq) {
       session.stop();
       return;
     }
     status.value = "live";
+    console.log("[CallScreen] startCall:live");
     startTimer();
   } catch (err) {
     console.error("[CallScreen] startCall failed", err);
