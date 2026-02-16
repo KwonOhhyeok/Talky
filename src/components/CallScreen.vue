@@ -8,6 +8,15 @@
         {{ status }}
       </span>
     </header>
+    <div v-if="status === 'connecting'" class="connecting-overlay" aria-live="polite">
+      <div class="connecting-popup" role="status" aria-label="Connecting">
+        <span class="connecting-title">Connecting...</span>
+        <span class="connecting-hint">Please wait before speaking</span>
+        <span class="connecting-dots" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </span>
+      </div>
+    </div>
     <Avatar :speaking="isModelSpeaking" :listening="isUserSpeaking" />
 
     <ControlBar
