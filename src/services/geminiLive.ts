@@ -30,6 +30,7 @@ export class GeminiLiveSession {
   socket: WebSocket | null = null;
   audioContext: AudioContext | null = null;
   workletNode: AudioWorkletNode | null = null;
+  scriptProcessor: ScriptProcessorNode | null = null;
   inputSource: MediaStreamAudioSourceNode | null = null;
   inputSink: GainNode | null = null;
   workletLoaded = false;
@@ -186,34 +187,94 @@ export class GeminiLiveSession {
     });
     this.log("audio:mic-granted");
 
-    if (!this.workletLoaded) {
-      const workletUrl = new URL(
-        "./worklets/pcm-encoder-worklet.js",
-        import.meta.url
-      );
-      await this.audioContext.audioWorklet.addModule(workletUrl);
-      this.workletLoaded = true;
-      this.log("audio:worklet-loaded");
-    }
-
     const source = this.audioContext.createMediaStreamSource(this.mediaStream);
-    const workletNode = new AudioWorkletNode(this.audioContext, "pcm-encoder");
     const muteGain = this.audioContext.createGain();
-    muteGain.gain.value = 0;
+    // Keep the input graph running while making the monitor path inaudible.
+    muteGain.gain.value = 0.00001;
+    muteGain.connect(this.audioContext.destination);
     const captureGeneration = ++this.inputCaptureGeneration;
     this.inputCaptureActive = true;
 
-    workletNode.port.onmessage = (event) => {
+    const shouldUseScriptProcessor = this.shouldUseScriptProcessorFallback();
+    if (shouldUseScriptProcessor) {
+      this.setupScriptProcessorCapture(source, muteGain, captureGeneration);
+      this.log("audio:capture-mode", { mode: "script-processor" });
+      return;
+    }
+
+    try {
+      if (!this.workletLoaded) {
+        const workletUrl = new URL(
+          "./worklets/pcm-encoder-worklet.js",
+          import.meta.url
+        );
+        await this.audioContext.audioWorklet.addModule(workletUrl);
+        this.workletLoaded = true;
+        this.log("audio:worklet-loaded");
+      }
+      const workletNode = new AudioWorkletNode(this.audioContext, "pcm-encoder");
+      workletNode.port.onmessage = (event) => {
+        if (!this.inputCaptureActive) return;
+        if (captureGeneration !== this.inputCaptureGeneration) return;
+        this.sendAudioChunk(event.data);
+      };
+      source.connect(workletNode);
+      workletNode.connect(muteGain);
+      this.inputSource = source;
+      this.inputSink = muteGain;
+      this.workletNode = workletNode;
+      this.log("audio:capture-mode", { mode: "worklet" });
+    } catch (err) {
+      this.log("audio:worklet-fallback", err);
+      this.setupScriptProcessorCapture(source, muteGain, captureGeneration);
+      this.log("audio:capture-mode", { mode: "script-processor-fallback" });
+    }
+  }
+
+  setupScriptProcessorCapture(
+    source: MediaStreamAudioSourceNode,
+    muteGain: GainNode,
+    captureGeneration: number
+  ) {
+    if (!this.audioContext) {
+      throw new Error("Audio context is not initialized");
+    }
+    const processor = this.audioContext.createScriptProcessor(2048, 1, 1);
+    processor.onaudioprocess = (event) => {
       if (!this.inputCaptureActive) return;
       if (captureGeneration !== this.inputCaptureGeneration) return;
-      this.sendAudioChunk(event.data);
+      const pcm16 = this.encodeFloat32ToPcm16(
+        event.inputBuffer.getChannelData(0)
+      );
+      this.sendAudioChunk(pcm16);
     };
-
-    source.connect(workletNode);
-    workletNode.connect(muteGain).connect(this.audioContext.destination);
+    source.connect(processor);
+    processor.connect(muteGain);
     this.inputSource = source;
     this.inputSink = muteGain;
-    this.workletNode = workletNode;
+    this.scriptProcessor = processor;
+  }
+
+  shouldUseScriptProcessorFallback() {
+    const ua = navigator.userAgent || "";
+    const isIOS =
+      /iPad|iPhone|iPod/.test(ua) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (isIOS) return true;
+    if (!this.audioContext?.audioWorklet) return true;
+    if (typeof AudioWorkletNode === "undefined") return true;
+    return false;
+  }
+
+  encodeFloat32ToPcm16(channel: Float32Array) {
+    const buffer = new ArrayBuffer(channel.length * 2);
+    const view = new DataView(buffer);
+    for (let i = 0; i < channel.length; i += 1) {
+      let sample = Math.max(-1, Math.min(1, channel[i]));
+      sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+      view.setInt16(i * 2, sample, true);
+    }
+    return buffer;
   }
 
   setMuted(muted: boolean) {
@@ -676,6 +737,7 @@ export class GeminiLiveSession {
     const hadInput =
       this.inputCaptureActive ||
       !!this.workletNode ||
+      !!this.scriptProcessor ||
       !!this.inputSource ||
       !!this.mediaStream;
     this.inputCaptureActive = false;
@@ -684,6 +746,11 @@ export class GeminiLiveSession {
       this.workletNode.port.onmessage = null;
       this.workletNode.disconnect();
       this.workletNode = null;
+    }
+    if (this.scriptProcessor) {
+      this.scriptProcessor.onaudioprocess = null;
+      this.scriptProcessor.disconnect();
+      this.scriptProcessor = null;
     }
     if (this.inputSource) {
       this.inputSource.disconnect();

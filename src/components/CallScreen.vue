@@ -97,7 +97,9 @@ const session = new GeminiLiveSession({
     archive.ingestModelAudio(chunk);
   },
   onStatus: (state) => {
-    if (state === "connected") status.value = "live";
+    if (state === "error") {
+      status.value = "error";
+    }
     if (state === "closed") {
       status.value = "closed";
       isUserSpeaking.value = false;
@@ -169,6 +171,7 @@ async function startCall() {
       session.stop();
       return;
     }
+    status.value = "live";
     startTimer();
   } catch (err) {
     console.error("[CallScreen] startCall failed", err);
