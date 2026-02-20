@@ -263,6 +263,13 @@ async function startCall() {
   try {
     console.log("[CallScreen] startCall:begin", { requestSeq });
     localStorage.setItem("talky:last_session_id", sessionId.value);
+    console.log("[CallScreen] startCall:startMic");
+    await withTimeout(session.startMic(), MIC_TIMEOUT_MS, "Microphone start");
+    if (requestSeq !== callRequestSeq) {
+      session.stop();
+      return;
+    }
+
     const createController = new AbortController();
     const createTimeoutId = window.setTimeout(
       () => createController.abort(),
@@ -279,7 +286,10 @@ async function startCall() {
     } finally {
       window.clearTimeout(createTimeoutId);
     }
-    if (requestSeq !== callRequestSeq) return;
+    if (requestSeq !== callRequestSeq) {
+      session.stop();
+      return;
+    }
     archiveReady.value = true;
     console.log("[CallScreen] startCall:tokenRequest");
     const response = await postJsonWithTimeout(
@@ -288,24 +298,24 @@ async function startCall() {
       NETWORK_TIMEOUT_MS,
       "Token request"
     );
-    if (requestSeq !== callRequestSeq) return;
+    if (requestSeq !== callRequestSeq) {
+      session.stop();
+      return;
+    }
     if (!response.ok) {
       const bodyText = await response.text().catch(() => "");
       throw new Error(`Token request failed (${response.status}): ${bodyText}`);
     }
     const data = await response.json();
-    if (requestSeq !== callRequestSeq) return;
+    if (requestSeq !== callRequestSeq) {
+      session.stop();
+      return;
+    }
     console.log("[CallScreen] startCall:connect");
     await session.connect({
       modelId: FIXED_MODEL_ID,
       ephemeralToken: data.token,
     });
-    if (requestSeq !== callRequestSeq) {
-      session.stop();
-      return;
-    }
-    console.log("[CallScreen] startCall:startMic");
-    await withTimeout(session.startMic(), MIC_TIMEOUT_MS, "Microphone start");
     if (requestSeq !== callRequestSeq) {
       session.stop();
       return;
@@ -316,6 +326,7 @@ async function startCall() {
   } catch (err) {
     console.error("[CallScreen] startCall failed", err);
     if (requestSeq === callRequestSeq) {
+      session.stop();
       status.value = "error";
     }
   }
