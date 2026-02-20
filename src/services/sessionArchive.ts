@@ -32,7 +32,17 @@ type StoredAudio = {
   bytes: number;
 };
 
+type PendingTranscript = {
+  seq: number;
+  speaker: string;
+  text: string;
+  ts: number;
+};
+
 const LOCAL_ARCHIVE_KEY = "talky:last_archive_manifest";
+const TRANSCRIPT_BATCH_MAX_ENTRIES = 16;
+const TRANSCRIPT_BATCH_MAX_BYTES = 8 * 1024;
+const AUDIO_BATCH_MAX_BYTES = 256 * 1024;
 
 export class SessionArchive {
   apiBase: string;
@@ -40,10 +50,17 @@ export class SessionArchive {
   session: SessionCreateResponse | null = null;
   transcriptSeq = 0;
   audioSeq = 0;
+  transcriptBatchSeq = 0;
   transcripts: StoredTranscript[] = [];
   audioChunks: StoredAudio[] = [];
   uploadQueue: Promise<void> = Promise.resolve();
   lastManifest: any = null;
+  pendingTranscriptBatch: PendingTranscript[] = [];
+  pendingTranscriptBatchBytes = 0;
+  pendingAudioBatch: Uint8Array[] = [];
+  pendingAudioBatchBytes = 0;
+  pendingAudioBatchTs: number | null = null;
+  pendingAudioBatchSampleRate: number | null = null;
 
   constructor(options: ArchiveOptions) {
     this.apiBase = options.apiBase;
@@ -64,63 +81,69 @@ export class SessionArchive {
     this.session = await response.json();
     this.transcriptSeq = 0;
     this.audioSeq = 0;
+    this.transcriptBatchSeq = 0;
     this.transcripts = [];
     this.audioChunks = [];
     this.lastManifest = null;
+    this.pendingTranscriptBatch = [];
+    this.pendingTranscriptBatchBytes = 0;
+    this.pendingAudioBatch = [];
+    this.pendingAudioBatchBytes = 0;
+    this.pendingAudioBatchTs = null;
+    this.pendingAudioBatchSampleRate = null;
     return this.session;
   }
 
   ingestTranscript(entry: { speaker: string; text: string; ts: number }) {
-    const session = this.session;
-    if (!session) return;
+    if (!this.session) return;
     const seq = ++this.transcriptSeq;
-    const path = `${session.prefix}/transcript/${this.pad(seq)}.json`;
-    const payload = {
+    const pendingEntry = {
       seq,
       speaker: entry.speaker,
       text: entry.text,
       ts: entry.ts,
     };
-    this.transcripts.push({
-      seq,
-      path,
-      speaker: entry.speaker,
-      text: entry.text,
-      ts: entry.ts,
-    });
-    const body = JSON.stringify(payload);
-    this.enqueue(async () => {
-      await this.putObject(session, path, "application/json", body);
-    });
+    this.pendingTranscriptBatch.push(pendingEntry);
+    this.pendingTranscriptBatchBytes += this.estimateTranscriptBytes(pendingEntry);
+    if (
+      this.pendingTranscriptBatch.length >= TRANSCRIPT_BATCH_MAX_ENTRIES ||
+      this.pendingTranscriptBatchBytes >= TRANSCRIPT_BATCH_MAX_BYTES
+    ) {
+      this.flushTranscriptBatch();
+    }
   }
 
   ingestModelAudio(chunk: { base64: string; mimeType: string; ts: number }) {
     const session = this.session;
     if (!session) return;
-    const seq = ++this.audioSeq;
     const bytes = this.base64ToBytes(chunk.base64);
     const sampleRate = this.parseRate(chunk.mimeType) || 24000;
-    const path = `${session.prefix}/model-audio/${this.pad(seq)}.pcm`;
-    this.audioChunks.push({
-      seq,
-      path,
-      mimeType: chunk.mimeType,
-      sampleRate,
-      ts: chunk.ts,
-      bytes: bytes.byteLength,
-    });
-    this.enqueue(async () => {
-      await this.putObject(session, path, "audio/pcm", bytes);
-    });
+    if (
+      this.pendingAudioBatchSampleRate !== null &&
+      this.pendingAudioBatchSampleRate !== sampleRate
+    ) {
+      this.flushAudioBatch();
+    }
+    if (this.pendingAudioBatchSampleRate === null) {
+      this.pendingAudioBatchSampleRate = sampleRate;
+      this.pendingAudioBatchTs = chunk.ts;
+    }
+    this.pendingAudioBatch.push(bytes);
+    this.pendingAudioBatchBytes += bytes.byteLength;
+    if (this.pendingAudioBatchBytes >= AUDIO_BATCH_MAX_BYTES) {
+      this.flushAudioBatch();
+    }
   }
 
   async finalize(modelId: string) {
     const session = this.session;
     if (!session) return null;
+    this.flushTranscriptBatch();
+    this.flushAudioBatch();
     const queueAtFinalize = this.uploadQueue;
+    await queueAtFinalize;
     const audioChunks = [...this.audioChunks];
     const transcripts = [...this.transcripts];
-    await queueAtFinalize;
     const endedAt = new Date().toISOString();
     const manifest = {
       version: 1,
@@ -244,6 +267,61 @@ export class SessionArchive {
       });
   }
 
+  flushTranscriptBatch() {
+    const session = this.session;
+    if (!session || this.pendingTranscriptBatch.length === 0) return;
+    const batchSeq = ++this.transcriptBatchSeq;
+    const path = `${session.prefix}/transcript-batch/${this.pad(batchSeq)}.json`;
+    const items = this.pendingTranscriptBatch.map((entry) => ({ ...entry }));
+    for (const entry of items) {
+      this.transcripts.push({
+        seq: entry.seq,
+        path,
+        speaker: entry.speaker,
+        text: entry.text,
+        ts: entry.ts,
+      });
+    }
+    const payload = {
+      version: 1,
+      items,
+    };
+    this.pendingTranscriptBatch = [];
+    this.pendingTranscriptBatchBytes = 0;
+    const body = JSON.stringify(payload);
+    this.enqueue(async () => {
+      await this.putObject(session, path, "application/json", body);
+    });
+  }
+
+  flushAudioBatch() {
+    const session = this.session;
+    if (!session || this.pendingAudioBatchBytes === 0) return;
+    const seq = ++this.audioSeq;
+    const sampleRate = this.pendingAudioBatchSampleRate || 24000;
+    const ts = this.pendingAudioBatchTs || Date.now();
+    const path = `${session.prefix}/model-audio/${this.pad(seq)}.pcm`;
+    const body = this.mergeByteChunks(
+      this.pendingAudioBatch,
+      this.pendingAudioBatchBytes
+    );
+    this.audioChunks.push({
+      seq,
+      path,
+      mimeType: `audio/pcm;rate=${sampleRate}`,
+      sampleRate,
+      ts,
+      bytes: body.byteLength,
+    });
+    this.pendingAudioBatch = [];
+    this.pendingAudioBatchBytes = 0;
+    this.pendingAudioBatchTs = null;
+    this.pendingAudioBatchSampleRate = null;
+    this.enqueue(async () => {
+      await this.putObject(session, path, "audio/pcm", body);
+    });
+  }
+
   async putObject(
     session: SessionCreateResponse,
     path: string,
@@ -311,6 +389,21 @@ export class SessionArchive {
     const value = Number(match[1]);
     if (!Number.isFinite(value) || value <= 0) return undefined;
     return value;
+  }
+
+  estimateTranscriptBytes(entry: PendingTranscript) {
+    return entry.speaker.length + entry.text.length + 48;
+  }
+
+  mergeByteChunks(chunks: Uint8Array[], totalBytes: number) {
+    if (chunks.length === 1) return chunks[0];
+    const merged = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return merged;
   }
 
   base64ToBytes(base64: string) {
