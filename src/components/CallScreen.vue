@@ -26,7 +26,11 @@
       @toggleMenu="toggleMenu"
     />
 
-    <ChatPanel :open="isChatOpen" :log="conversationLog" @close="toggleChat" />
+    <ChatPanel
+      :open="isChatOpen"
+      :log="mergedConversationLog"
+      @close="toggleChat"
+    />
 
     <section class="settings-sheet" :class="{ open: isSettingsOpen }">
       <div class="panel-header">
@@ -121,11 +125,17 @@ const tokenApiUrl = `${apiBase}/api/ephemeral-token`;
 const analysisApiUrl = "";
 const NETWORK_TIMEOUT_MS = 12000;
 const MIC_TIMEOUT_MS = 12000;
+const MAX_CONVERSATION_TURNS = 200;
+const MERGE_SAME_SPEAKER_GAP_MS = 5000;
 const sessionId = ref(
   localStorage.getItem("talky:last_session_id") ||
     (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
 );
-const conversationLog = ref(loadLog(sessionId.value));
+const loadedConversationLog = loadLog(sessionId.value);
+const conversationLog = ref(applyConversationPolicy(loadedConversationLog));
+if (conversationLog.value.length !== loadedConversationLog.length) {
+  saveLog(sessionId.value, conversationLog.value);
+}
 const analysis = ref("");
 const archiveReady = ref(false);
 const adminPrompt = ref(DEFAULT_SYSTEM_INSTRUCTION);
@@ -170,7 +180,7 @@ const session = new GeminiLiveSession({
   modelId: FIXED_MODEL_ID,
   apiVersion: "v1alpha",
   onTranscript: (entry) => {
-    conversationLog.value.push(entry);
+    appendConversationEntry(entry);
     saveLog(sessionId.value, conversationLog.value);
     archive.ingestTranscript(entry);
   },
@@ -205,6 +215,7 @@ const session = new GeminiLiveSession({
 const isCallActive = computed(
   () => status.value === "connecting" || status.value === "live"
 );
+const mergedConversationLog = computed(() => conversationLog.value);
 
 function startTimer() {
   if (timerId) return;
@@ -458,6 +469,67 @@ function loadLog(id) {
 
 function saveLog(id, log) {
   localStorage.setItem(`talky:session:${id}`, JSON.stringify(log));
+}
+
+function appendConversationEntry(entry) {
+  conversationLog.value = applyConversationPolicy([
+    ...conversationLog.value,
+    entry,
+  ]);
+}
+
+function applyConversationPolicy(entries) {
+  const merged = mergeConversationEntries(entries);
+  if (merged.length <= MAX_CONVERSATION_TURNS) return merged;
+  return merged.slice(-MAX_CONVERSATION_TURNS);
+}
+
+function mergeConversationEntries(entries) {
+  const merged = [];
+  for (const rawEntry of entries || []) {
+    if (!rawEntry || typeof rawEntry.text !== "string") continue;
+    const text = rawEntry.text.trim();
+    if (!text) continue;
+    const speaker =
+      typeof rawEntry.speaker === "string" && rawEntry.speaker
+        ? rawEntry.speaker
+        : "unknown";
+    const ts = Number(rawEntry.ts) || Date.now();
+    const last = merged[merged.length - 1];
+
+    if (
+      last &&
+      last.speaker === speaker &&
+      shouldMergeIntoLast(last, text, ts)
+    ) {
+      last.text = joinTranscriptText(last.text, text);
+      last.ts = ts;
+      continue;
+    }
+
+    merged.push({
+      speaker,
+      text,
+      ts,
+    });
+  }
+  return merged;
+}
+
+function shouldMergeIntoLast(last, nextText, nextTs) {
+  const lastTs = Number(last.ts) || nextTs;
+  if (nextTs - lastTs > MERGE_SAME_SPEAKER_GAP_MS) return false;
+  if (/[.!?]\s*$/.test(last.text) && /^[A-Z]/.test(nextText)) return false;
+  return true;
+}
+
+function joinTranscriptText(previous, next) {
+  if (!previous) return next;
+  if (!next) return previous;
+  if (/\s$/.test(previous) || /^\s/.test(next)) return `${previous}${next}`;
+  if (/^[,.;:!?)]/.test(next)) return `${previous}${next}`;
+  if (/[([{/]$/.test(previous)) return `${previous}${next}`;
+  return `${previous} ${next}`;
 }
 
 function formatLogArgs(args) {

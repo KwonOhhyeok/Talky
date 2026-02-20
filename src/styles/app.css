@@ -406,12 +406,48 @@ body::before {
   text-transform: capitalize;
 }
 
+.log-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.log-meta strong {
+  margin-bottom: 0;
+}
+
+.log-time {
+  font-size: 11px;
+  color: #6d7c99;
+  white-space: nowrap;
+}
+
 .log-item.user {
   border-left: 3px solid #2d79ff;
 }
 
 .log-item.model {
   border-left: 3px solid #1ec9a0;
+}
+
+.log-date-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #63779a;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.log-date-divider::before,
+.log-date-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #cad7ee;
 }
 
 .settings-sheet {
