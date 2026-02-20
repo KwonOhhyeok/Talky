@@ -86,8 +86,9 @@ export class GeminiLiveSession {
     this.apiVersion = options.apiVersion || "v1alpha";
     this.model =
       options.model || "gemini-2.5-flash-native-audio-preview-12-2025";
-    this.systemInstruction =
-      options.systemInstruction || DEFAULT_SYSTEM_INSTRUCTION;
+    this.systemInstruction = this.normalizeSystemInstruction(
+      options.systemInstruction
+    );
     this.outputSampleRate = options.outputSampleRate || 24000;
     this.debug = options.debug ?? true;
     this.onTranscript = options.onTranscript;
@@ -97,6 +98,10 @@ export class GeminiLiveSession {
     this.onAudioEnd = options.onAudioEnd;
     this.onUserSpeechStart = options.onUserSpeechStart;
     this.onUserSpeechEnd = options.onUserSpeechEnd;
+  }
+
+  setSystemInstruction(systemInstruction: string) {
+    this.systemInstruction = this.normalizeSystemInstruction(systemInstruction);
   }
 
   async connect({ modelId, ephemeralToken }: {
@@ -850,5 +855,10 @@ export class GeminiLiveSession {
       return model;
     }
     return `models/${model}`;
+  }
+
+  normalizeSystemInstruction(instruction?: string) {
+    if (typeof instruction !== "string") return DEFAULT_SYSTEM_INSTRUCTION;
+    return instruction;
   }
 }

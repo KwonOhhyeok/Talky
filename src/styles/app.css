@@ -507,6 +507,74 @@ body::before {
   padding: 12px;
 }
 
+.admin-overlay {
+  position: fixed;
+  inset: 12px;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: rgba(14, 24, 43, 0.36);
+  backdrop-filter: blur(4px);
+}
+
+.admin-modal {
+  width: min(1200px, calc(100vw - 32px));
+  height: min(90vh, calc(100dvh - 32px));
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid #d5e0f2;
+  box-shadow: 0 24px 50px rgba(13, 30, 63, 0.28);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-stack {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+}
+
+.admin-field {
+  min-height: 0;
+}
+
+.admin-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-reset-btn {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.admin-textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  resize: none;
+  border: 1px solid #d4e0f4;
+  background: #f7faff;
+  color: #172746;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.admin-logarea {
+  background: #0f1c30;
+  border-color: #243f66;
+  color: #d8e7ff;
+}
+
 @keyframes speakingPulse {
   0% {
     transform: translateY(6px) scale(1);
@@ -564,6 +632,17 @@ body::before {
 
   .control-bar::before {
     width: calc(100% - 32px);
+  }
+
+  .admin-overlay {
+    inset: 0;
+  }
+
+  .admin-modal {
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+    border: none;
   }
 }
 

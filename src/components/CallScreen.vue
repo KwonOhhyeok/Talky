@@ -36,9 +36,56 @@
       <div class="settings-actions">
         <button class="secondary-btn" @click="resetSession">New session</button>
         <button class="secondary-btn" @click="playLastTts">Play Last TTS</button>
+        <button
+          v-if="isDebugModeEnabled"
+          class="secondary-btn"
+          @click="openAdminPanel"
+        >
+          Admin Mode
+        </button>
       </div>
       <div class="analysis-box">
         {{ analysis || "End the call to request analysis." }}
+      </div>
+    </section>
+    <section
+      v-if="isDebugModeEnabled && isAdminPanelOpen"
+      class="admin-overlay"
+      aria-label="Admin Mode"
+    >
+      <div class="admin-modal">
+        <div class="panel-header">
+          <span>Admin Mode</span>
+          <button class="secondary-btn" @click="closeAdminPanel">Close</button>
+        </div>
+        <div class="admin-stack">
+          <label class="field admin-field">
+            <div class="admin-field-header">
+              <span>System Prompt</span>
+              <button
+                type="button"
+                class="secondary-btn admin-reset-btn"
+                @click="resetAdminPrompt"
+              >
+                Reset
+              </button>
+            </div>
+            <textarea
+              v-model="adminPrompt"
+              class="admin-textarea"
+              spellcheck="false"
+            ></textarea>
+          </label>
+          <label class="field admin-field">
+            <span>Console Logs</span>
+            <textarea
+              class="admin-textarea admin-logarea"
+              :value="adminLogText"
+              readonly
+              spellcheck="false"
+            ></textarea>
+          </label>
+        </div>
       </div>
     </section>
   </div>
@@ -51,6 +98,7 @@ import ControlBar from "./ControlBar.vue";
 import ChatPanel from "./ChatPanel.vue";
 import { GeminiLiveSession } from "../services/geminiLive";
 import { SessionArchive } from "../services/sessionArchive";
+import { DEFAULT_SYSTEM_INSTRUCTION } from "../config/systemPrompt";
 
 const timer = ref("00:00");
 const seconds = ref(0);
@@ -63,6 +111,7 @@ const isModelSpeaking = ref(false);
 const isUserSpeaking = ref(false);
 const status = ref("idle");
 const isCallTransitioning = ref(false);
+const isAdminPanelOpen = ref(false);
 
 const FIXED_MODEL_ID = "gemini-2.5-flash-native-audio-preview-12-2025";
 const apiBase = import.meta.env.DEV
@@ -79,6 +128,36 @@ const sessionId = ref(
 const conversationLog = ref(loadLog(sessionId.value));
 const analysis = ref("");
 const archiveReady = ref(false);
+const adminPrompt = ref(DEFAULT_SYSTEM_INSTRUCTION);
+const adminLogLines = ref([]);
+const MAX_ADMIN_LOG_CHARS = 1000;
+const adminLogText = computed(() => {
+  const text = adminLogLines.value.join("\n");
+  return text.length > MAX_ADMIN_LOG_CHARS
+    ? text.slice(-MAX_ADMIN_LOG_CHARS)
+    : text;
+});
+const isDebugModeEnabled =
+  new URLSearchParams(window.location.search).get("debug") === "true";
+const MAX_ADMIN_LOG_LINES = 2000;
+let restoreConsoleLog = null;
+
+if (isDebugModeEnabled) {
+  const originalConsoleLog = console.log.bind(console);
+  console.log = (...args) => {
+    adminLogLines.value.push(formatLogArgs(args));
+    if (adminLogLines.value.length > MAX_ADMIN_LOG_LINES) {
+      adminLogLines.value.splice(
+        0,
+        adminLogLines.value.length - MAX_ADMIN_LOG_LINES
+      );
+    }
+    originalConsoleLog(...args);
+  };
+  restoreConsoleLog = () => {
+    console.log = originalConsoleLog;
+  };
+}
 
 const archive = new SessionArchive({
   apiBase,
@@ -180,6 +259,7 @@ async function startCall() {
   if (status.value === "live" || status.value === "connecting") return;
   const requestSeq = ++callRequestSeq;
   status.value = "connecting";
+  session.setSystemInstruction(adminPrompt.value);
   try {
     console.log("[CallScreen] startCall:begin", { requestSeq });
     localStorage.setItem("talky:last_session_id", sessionId.value);
@@ -284,6 +364,18 @@ function toggleMenu() {
   if (isSettingsOpen.value) isChatOpen.value = false;
 }
 
+function openAdminPanel() {
+  isAdminPanelOpen.value = true;
+}
+
+function closeAdminPanel() {
+  isAdminPanelOpen.value = false;
+}
+
+function resetAdminPrompt() {
+  adminPrompt.value = DEFAULT_SYSTEM_INSTRUCTION;
+}
+
 async function analyzeConversation() {
   if (!conversationLog.value.length) {
     analysis.value = "No transcript captured.";
@@ -335,6 +427,7 @@ async function playLastTts() {
 onBeforeUnmount(() => {
   session.stop();
   stopTimer();
+  restoreConsoleLog?.();
 });
 
 function formatTime(totalSeconds) {
@@ -354,5 +447,19 @@ function loadLog(id) {
 
 function saveLog(id, log) {
   localStorage.setItem(`talky:session:${id}`, JSON.stringify(log));
+}
+
+function formatLogArgs(args) {
+  return args.map(formatLogArg).join(" ");
+}
+
+function formatLogArg(value) {
+  if (typeof value === "string") return value;
+  if (value instanceof Error) return value.stack || `${value.name}: ${value.message}`;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 </script>
