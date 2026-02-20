@@ -18,6 +18,16 @@
       </div>
     </div>
     <Avatar :speaking="isModelSpeaking" :listening="isUserSpeaking" />
+    <section v-if="showLessonMaterial" class="lesson-brief">
+      <h3 class="lesson-title">{{ LESSON_MATERIAL_TITLE }}</h3>
+      <p
+        v-for="(paragraph, index) in LESSON_MATERIAL_PARAGRAPHS"
+        :key="`lesson-material-${index}`"
+        class="lesson-paragraph"
+      >
+        {{ paragraph }}
+      </p>
+    </section>
 
     <ControlBar
       :call-active="isCallActive"
@@ -116,6 +126,12 @@ const isUserSpeaking = ref(false);
 const status = ref("idle");
 const isCallTransitioning = ref(false);
 const isAdminPanelOpen = ref(false);
+const LESSON_MATERIAL_TITLE = "Will A.I. Kill Translation Jobs?";
+const LESSON_MATERIAL_PARAGRAPHS = [
+  "AI is transforming translation, with Harlequin France testing Fluent Planet's AI-assisted tools to make processes cheaper and faster for popular English-French novels.",
+  "This shift sparks outrage from translator groups, who deem cutting human ties unacceptable, while other publishers seek similar AI quotes amid rising demand.",
+  "Research shows translation as highly vulnerable to generative AI, potentially displacing jobs like typists. EU linguist employment rose slightly per latest data.",
+];
 
 const FIXED_MODEL_ID = "gemini-2.5-flash-native-audio-preview-12-2025";
 const apiBase = import.meta.env.DEV
@@ -215,6 +231,7 @@ const session = new GeminiLiveSession({
 const isCallActive = computed(
   () => status.value === "connecting" || status.value === "live"
 );
+const showLessonMaterial = computed(() => status.value === "live");
 const mergedConversationLog = computed(() => conversationLog.value);
 
 function startTimer() {
