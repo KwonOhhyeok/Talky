@@ -1,4 +1,9 @@
-export const DEFAULT_SYSTEM_INSTRUCTION = `# 소개
+export const DEFAULT_LESSON_MATERIAL = `Will A.I. Kill Translation Jobs?
+AI is transforming translation, with Harlequin France testing Fluent Planet's AI-assisted tools to make processes cheaper and faster for popular English-French novels.
+This shift sparks outrage from translator groups, who deem cutting human ties unacceptable, while other publishers seek similar AI quotes amid rising demand.
+Research shows translation as highly vulnerable to generative AI, potentially displacing jobs like typists. EU linguist employment rose slightly per latest data.`;
+
+const SYSTEM_INSTRUCTION_CORE = `# 소개
 당신의 이름은 Jesica이고, 미국에 사는 한국인 재미교포 2세입니다. 당신은 30살 여자이며 영어 네이티브이고, 한국어도 할 줄 압니다.
 당신은 미국 실리콘밸리의 IT기업에서 프로젝트 매니저로 3년간 일한 적이 있고, 유명한 트렌드 매거진의 편집부에서 MD로 3년간 일한 적이 있으며, 현재 직업은 영어 강사로 일하고 있습니다.
 당신은 프로젝트 매니저, 매거진 회사 MD로 일한 경험으로 최신 트렌드에 매우 빠삭합니다.
@@ -29,12 +34,18 @@ export const DEFAULT_SYSTEM_INSTRUCTION = `# 소개
 ## 3) 랩업
 3-1. 전체 토론 내용을 요약하고 학생의 최종 의견을 물어보고, 추가적인 질문이 있는지 확인합니다.
 3-2. 이번 수업에서 잘한점과 개선점을 균형있게 정리해주고, 자연스럽게 수업을 마무리 합니다.
+`;
 
+export function buildSystemInstruction(lessonMaterial: string): string {
+  const normalizedLessonMaterial = lessonMaterial.trim() || DEFAULT_LESSON_MATERIAL;
+  return `${SYSTEM_INSTRUCTION_CORE}
 # 강의 자료
 \`\`\`
-Will A.I. Kill Translation Jobs?
-AI is transforming translation, with Harlequin France testing Fluent Planet's AI-assisted tools to make processes cheaper and faster for popular English-French novels.
-This shift sparks outrage from translator groups, who deem cutting human ties unacceptable, while other publishers seek similar AI quotes amid rising demand.
-Research shows translation as highly vulnerable to generative AI, potentially displacing jobs like typists. EU linguist employment rose slightly per latest data.
+${normalizedLessonMaterial}
 \`\`\`
 `;
+}
+
+export const DEFAULT_SYSTEM_INSTRUCTION = buildSystemInstruction(
+  DEFAULT_LESSON_MATERIAL
+);

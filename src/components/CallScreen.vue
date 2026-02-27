@@ -51,12 +51,17 @@
       </div>
       <div v-else class="h-12 sm:h-16 mt-2"></div>
 
-      <!-- Lesson Material Card (visible when live) -->
-      <div v-if="showLessonMaterial" class="w-full max-w-sm mx-auto rounded-3xl bg-primary/10 border border-primary/20 flex flex-col justify-center px-5 sm:px-8 py-8 sm:py-16">
-        <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6 text-center">Lesson Material</h3>
-        <p class="text-slate-700 dark:text-slate-200 text-sm leading-relaxed text-center font-medium">
-          {{ materialDisplayText }}
-        </p>
+      <!-- Lesson Material Card -->
+      <div
+        v-if="showLessonMaterial"
+        class="w-full max-w-sm mx-auto rounded-3xl bg-primary/10 border border-primary/20 h-[50dvh] overflow-hidden flex flex-col px-5 sm:px-8 py-8 sm:py-16"
+      >
+        <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6 text-center shrink-0">Lesson Material</h3>
+        <div class="flex-1 min-h-0 overflow-y-auto pr-1">
+          <p class="text-slate-700 dark:text-slate-200 text-sm leading-relaxed text-center font-medium whitespace-pre-line">
+            {{ materialDisplayText }}
+          </p>
+        </div>
       </div>
       <div v-else class="flex-1"></div>
 
@@ -153,6 +158,13 @@
         </div>
       </div>
     </section>
+
+    <InterestPopup
+      v-if="showInterestPopup && status === 'idle'"
+      :is-loading="isGeneratingLesson"
+      :error-message="lessonGenerationError"
+      @start="handleInterestStart"
+    />
   </div>
 </template>
 
@@ -160,9 +172,15 @@
 import { ref, computed, onBeforeUnmount } from "vue";
 import ControlBar from "./ControlBar.vue";
 import ChatPanel from "./ChatPanel.vue";
+import InterestPopup from "./InterestPopup.vue";
 import { GeminiLiveSession } from "../services/geminiLive";
 import { SessionArchive } from "../services/sessionArchive";
-import { DEFAULT_SYSTEM_INSTRUCTION } from "../config/systemPrompt";
+import { generateLesson } from "../services/lessonGenerator";
+import {
+  DEFAULT_LESSON_MATERIAL,
+  DEFAULT_SYSTEM_INSTRUCTION,
+  buildSystemInstruction,
+} from "../config/systemPrompt";
 
 const timer = ref("00:00");
 const seconds = ref(0);
@@ -176,14 +194,11 @@ const isUserSpeaking = ref(false);
 const status = ref("idle");
 const isCallTransitioning = ref(false);
 const isAdminPanelOpen = ref(false);
-const LESSON_MATERIAL_TITLE = "Will A.I. Kill Translation Jobs?";
-const LESSON_MATERIAL_PARAGRAPHS = [
-  "AI is transforming translation, with Harlequin France testing Fluent Planet's AI-assisted tools to make processes cheaper and faster for popular English-French novels.",
-  "This shift sparks outrage from translator groups, who deem cutting human ties unacceptable, while other publishers seek similar AI quotes amid rising demand.",
-  "Research shows translation as highly vulnerable to generative AI, potentially displacing jobs like typists. EU linguist employment rose slightly per latest data.",
-];
-
-const materialDisplayText = computed(() => LESSON_MATERIAL_PARAGRAPHS.join(" "));
+const showInterestPopup = ref(true);
+const lessonMaterial = ref("");
+const isGeneratingLesson = ref(false);
+const lessonGenerationError = ref("");
+const materialDisplayText = computed(() => lessonMaterial.value.trim());
 
 const statusDisplayText = computed(() => {
   if (isUserSpeaking.value) return '"Listening..."';
@@ -316,7 +331,11 @@ const session = new GeminiLiveSession({
 const isCallActive = computed(
   () => status.value === "connecting" || status.value === "live"
 );
-const showLessonMaterial = computed(() => status.value === "live");
+const showLessonMaterial = computed(
+  () =>
+    Boolean(lessonMaterial.value.trim()) &&
+    (status.value === "idle" || status.value === "live")
+);
 const mergedConversationLog = computed(() => conversationLog.value);
 
 function startTimer() {
@@ -368,8 +387,41 @@ async function postJsonWithTimeout(url, body, timeoutMs, label) {
   }
 }
 
+async function handleInterestStart(interest) {
+  const topic = typeof interest === "string" ? interest.trim() : "";
+  if (!topic || isGeneratingLesson.value) return;
+
+  lessonGenerationError.value = "";
+  isGeneratingLesson.value = true;
+  try {
+    const generatedLesson = await generateLesson(topic, { apiBase });
+    const resolvedLesson = generatedLesson.trim() || DEFAULT_LESSON_MATERIAL;
+    console.log("[CallScreen] lesson material resolved", {
+      topic,
+      lessonMaterial: resolvedLesson,
+    });
+    lessonMaterial.value = resolvedLesson;
+    adminPrompt.value = buildSystemInstruction(resolvedLesson);
+    showInterestPopup.value = false;
+  } catch (err) {
+    console.error("[CallScreen] handleInterestStart failed", err);
+    lessonGenerationError.value =
+      "강의자료를 생성하지 못해 기본 자료로 시작합니다.";
+    lessonMaterial.value = DEFAULT_LESSON_MATERIAL;
+    adminPrompt.value = buildSystemInstruction(DEFAULT_LESSON_MATERIAL);
+    showInterestPopup.value = false;
+  } finally {
+    isGeneratingLesson.value = false;
+  }
+}
+
 async function startCall() {
   if (status.value === "live" || status.value === "connecting") return;
+  if (showInterestPopup.value || isGeneratingLesson.value) return;
+  if (!lessonMaterial.value.trim()) {
+    showInterestPopup.value = true;
+    return;
+  }
   const requestSeq = ++callRequestSeq;
   status.value = "connecting";
   session.setSystemInstruction(adminPrompt.value);
@@ -497,7 +549,9 @@ function closeAdminPanel() {
 }
 
 function resetAdminPrompt() {
-  adminPrompt.value = DEFAULT_SYSTEM_INSTRUCTION;
+  adminPrompt.value = buildSystemInstruction(
+    lessonMaterial.value.trim() || DEFAULT_LESSON_MATERIAL
+  );
 }
 
 async function analyzeConversation() {
@@ -530,10 +584,19 @@ async function analyzeConversation() {
 function resetSession() {
   conversationLog.value = [];
   analysis.value = "";
+  status.value = "idle";
+  stopTimer();
+  seconds.value = 0;
+  timer.value = formatTime(0);
   sessionId.value =
     crypto.randomUUID?.() || `session-${Date.now().toString(36)}`;
   saveLog(sessionId.value, conversationLog.value);
   archiveReady.value = false;
+  lessonMaterial.value = "";
+  lessonGenerationError.value = "";
+  isGeneratingLesson.value = false;
+  showInterestPopup.value = true;
+  adminPrompt.value = DEFAULT_SYSTEM_INSTRUCTION;
 }
 
 async function playLastTts() {

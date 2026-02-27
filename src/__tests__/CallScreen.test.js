@@ -27,7 +27,10 @@ vi.mock("../services/sessionArchive", () => {
 });
 
 vi.mock("../config/systemPrompt", () => ({
+  DEFAULT_LESSON_MATERIAL: "Fallback lesson material",
   DEFAULT_SYSTEM_INSTRUCTION: "Test system instruction",
+  buildSystemInstruction: (lessonMaterial) =>
+    `Test system instruction\n${lessonMaterial}`,
 }));
 
 // Stub fetch globally
@@ -38,6 +41,9 @@ globalThis.fetch = vi.fn().mockResolvedValue({
 });
 
 import CallScreen from "../components/CallScreen.vue";
+
+const TEST_LESSON_MATERIAL = `Remote Work vs Office
+Many tech companies are tightening return-to-office rules while employees argue hybrid work improves focus and quality of life.`;
 
 /**
  * Helper to mount CallScreen and set internal reactive state.
@@ -111,6 +117,13 @@ describe("CallScreen", () => {
     expect(screen.queryByText("Lesson Material")).not.toBeInTheDocument();
   });
 
+  it("shows InterestPopup in idle state", () => {
+    render(CallScreen);
+    expect(
+      screen.getByText("What do you want to talk about?")
+    ).toBeInTheDocument();
+  });
+
   it("shows the status text as 'idle' in the header badge", () => {
     render(CallScreen);
     expect(screen.getByText("idle")).toBeInTheDocument();
@@ -170,7 +183,10 @@ describe("CallScreen", () => {
   // -----------------------------------------------------------------------
   describe("when status is live", () => {
     it("shows waveform bars (24 total)", async () => {
-      const wrapper = mountAndSetState({ status: "live" });
+      const wrapper = mountAndSetState({
+        status: "live",
+        lessonMaterial: TEST_LESSON_MATERIAL,
+      });
       await wrapper.vm.$nextTick();
 
       const bars = wrapper.findAll(".waveform-bar");
@@ -178,7 +194,10 @@ describe("CallScreen", () => {
     });
 
     it("shows LIVE badge with ping animation", async () => {
-      const wrapper = mountAndSetState({ status: "live" });
+      const wrapper = mountAndSetState({
+        status: "live",
+        lessonMaterial: TEST_LESSON_MATERIAL,
+      });
       await wrapper.vm.$nextTick();
 
       expect(wrapper.text()).toContain("LIVE");
@@ -187,29 +206,42 @@ describe("CallScreen", () => {
     });
 
     it("shows lesson material card with title", async () => {
-      const wrapper = mountAndSetState({ status: "live" });
+      const wrapper = mountAndSetState({
+        status: "live",
+        lessonMaterial: TEST_LESSON_MATERIAL,
+      });
       await wrapper.vm.$nextTick();
 
       expect(wrapper.text()).toContain("Lesson Material");
     });
 
     it("shows lesson material paragraphs joined together", async () => {
-      const wrapper = mountAndSetState({ status: "live" });
+      const wrapper = mountAndSetState({
+        status: "live",
+        lessonMaterial: TEST_LESSON_MATERIAL,
+      });
       await wrapper.vm.$nextTick();
 
-      // Check that the material content renders (first sentence of first paragraph)
-      expect(wrapper.text()).toContain("AI is transforming translation");
+      expect(wrapper.text()).toContain(
+        "Many tech companies are tightening return-to-office rules"
+      );
     });
 
     it("does NOT show connecting overlay", async () => {
-      const wrapper = mountAndSetState({ status: "live" });
+      const wrapper = mountAndSetState({
+        status: "live",
+        lessonMaterial: TEST_LESSON_MATERIAL,
+      });
       await wrapper.vm.$nextTick();
 
       expect(wrapper.text()).not.toContain("Connecting...");
     });
 
     it("shows 'Listening...' status text by default (neither speaking)", async () => {
-      const wrapper = mountAndSetState({ status: "live" });
+      const wrapper = mountAndSetState({
+        status: "live",
+        lessonMaterial: TEST_LESSON_MATERIAL,
+      });
       await wrapper.vm.$nextTick();
 
       expect(wrapper.text()).toContain('"Listening..."');

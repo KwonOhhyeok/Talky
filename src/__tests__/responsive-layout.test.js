@@ -28,7 +28,10 @@ vi.mock("../services/sessionArchive", () => {
 });
 
 vi.mock("../config/systemPrompt", () => ({
+  DEFAULT_LESSON_MATERIAL: "Fallback lesson material",
   DEFAULT_SYSTEM_INSTRUCTION: "Test system instruction",
+  buildSystemInstruction: (lessonMaterial) =>
+    `Test system instruction\n${lessonMaterial}`,
 }));
 
 globalThis.fetch = vi.fn().mockResolvedValue({
@@ -170,7 +173,10 @@ describe("CallScreen responsive layout classes", () => {
   });
 
   it("lesson material card has responsive padding: px-5 sm:px-8 py-8 sm:py-16", async () => {
-    const wrapper = mountCallScreenWithState({ status: "live" });
+    const wrapper = mountCallScreenWithState({
+      status: "live",
+      lessonMaterial: "Title\nSummary",
+    });
     await wrapper.vm.$nextTick();
 
     // Find the lesson material card — it's the div containing the h3 with "Lesson Material"
