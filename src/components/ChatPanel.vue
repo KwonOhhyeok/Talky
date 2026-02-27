@@ -1,18 +1,38 @@
 <template>
-  <section class="chat-panel" :class="{ open }">
-    <div class="panel-header">
-      <span>Conversation</span>
-      <button class="secondary-btn" @click="$emit('close')">Close</button>
+  <section
+    class="absolute inset-0 z-40 bg-white/95 dark:bg-background-dark/95 backdrop-blur-lg p-4 sm:p-6 flex flex-col gap-4 transition-transform duration-300"
+    :class="open ? 'translate-y-0' : 'translate-y-full'"
+  >
+    <div class="flex items-center justify-between">
+      <span class="text-slate-800 dark:text-white font-bold">Conversation</span>
+      <button
+        class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors"
+        @click="$emit('close')"
+      >
+        Close
+      </button>
     </div>
-    <div class="log-list">
+    <div class="flex-1 overflow-y-auto flex flex-col gap-2.5">
       <div v-for="item in renderItems" :key="item.key">
-        <div v-if="item.type === 'divider'" class="log-date-divider">
+        <div
+          v-if="item.type === 'divider'"
+          class="flex items-center gap-2.5 text-slate-400 dark:text-slate-500 text-[11px] font-bold tracking-wide"
+        >
+          <span class="flex-1 h-px bg-secondary/30"></span>
           <span>{{ item.label }}</span>
+          <span class="flex-1 h-px bg-secondary/30"></span>
         </div>
-        <div v-else class="log-item" :class="item.entry.speaker">
-          <div class="log-meta">
-            <strong>{{ item.entry.speaker }}</strong>
-            <time class="log-time">{{ item.dateTime }}</time>
+        <div
+          v-else
+          class="rounded-xl p-3 bg-white dark:bg-slate-800 border border-secondary/15 text-xs sm:text-sm leading-relaxed text-slate-700 dark:text-slate-300"
+          :class="{
+            'border-l-[3px] border-l-blue-500': item.entry.speaker === 'user',
+            'border-l-[3px] border-l-primary': item.entry.speaker === 'model',
+          }"
+        >
+          <div class="flex items-baseline justify-between gap-2 mb-1">
+            <strong class="capitalize text-slate-800 dark:text-slate-200">{{ item.entry.speaker }}</strong>
+            <time class="text-[11px] text-slate-400 dark:text-slate-500 whitespace-nowrap">{{ item.dateTime }}</time>
           </div>
           <div>{{ item.entry.text }}</div>
         </div>

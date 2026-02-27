@@ -1,34 +1,74 @@
 <template>
-  <div class="call-screen">
-    <header class="top-bar">
-      <span class="meta-chip timer-chip">{{ timer }}</span>
-      <span class="brand">Talky Live</span>
-      <span class="meta-chip status-chip">
-        <span class="status-dot" :class="{ live: status === 'live' }"></span>
-        {{ status }}
-      </span>
+  <div class="relative flex h-dvh w-full max-w-md mx-auto flex-col overflow-hidden font-display">
+    <!-- Header -->
+    <header class="flex items-center p-3 sm:p-6 pt-[max(0.75rem,env(safe-area-inset-top))] justify-between shrink-0">
+      <div class="flex items-baseline gap-1.5 px-3 py-1.5 rounded-full bg-secondary/10 border border-secondary/20">
+        <span class="text-sm font-bold text-slate-800 dark:text-white">{{ timer }}</span>
+      </div>
+      <h2 class="text-slate-800 dark:text-slate-100 text-sm font-semibold tracking-widest uppercase">Talky Live</h2>
+      <div
+        v-if="status === 'live'"
+        class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20"
+      >
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">LIVE</span>
+      </div>
+      <div v-else class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+        <span class="relative flex h-2 w-2">
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-slate-400"></span>
+        </span>
+        <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 tracking-wider uppercase">{{ status }}</span>
+      </div>
     </header>
-    <div v-if="status === 'connecting'" class="connecting-overlay" aria-live="polite">
-      <div class="connecting-popup" role="status" aria-label="Connecting">
-        <span class="connecting-title">Connecting...</span>
-        <span class="connecting-hint">Please wait before speaking</span>
-        <span class="connecting-dots" aria-hidden="true">
-          <i></i><i></i><i></i>
+
+    <!-- Connecting Overlay -->
+    <div v-if="status === 'connecting'" class="absolute inset-0 z-20 grid place-items-center pointer-events-none bg-white/40 dark:bg-background-dark/40">
+      <div class="min-w-[220px] p-5 rounded-2xl grid justify-items-center gap-2 bg-white/95 dark:bg-slate-800/95 border border-secondary/30 shadow-xl" role="status" aria-label="Connecting">
+        <span class="text-slate-800 dark:text-white text-lg font-bold tracking-tight">Connecting...</span>
+        <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold">Please wait before speaking</span>
+        <span class="inline-flex items-center gap-1.5 mt-1" aria-hidden="true">
+          <i class="w-2 h-2 rounded-full bg-primary" style="animation: connecting-bounce 1s ease-in-out infinite"></i>
+          <i class="w-2 h-2 rounded-full bg-primary" style="animation: connecting-bounce 1s ease-in-out infinite 0.14s"></i>
+          <i class="w-2 h-2 rounded-full bg-primary" style="animation: connecting-bounce 1s ease-in-out infinite 0.28s"></i>
         </span>
       </div>
     </div>
-    <Avatar :speaking="isModelSpeaking" :listening="isUserSpeaking" />
-    <section v-if="showLessonMaterial" class="lesson-brief">
-      <h3 class="lesson-title">{{ LESSON_MATERIAL_TITLE }}</h3>
-      <p
-        v-for="(paragraph, index) in LESSON_MATERIAL_PARAGRAPHS"
-        :key="`lesson-material-${index}`"
-        class="lesson-paragraph"
-      >
-        {{ paragraph }}
-      </p>
-    </section>
 
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col items-center px-4 sm:px-6 justify-between py-4">
+      <!-- Waveform Bars (visible when live) -->
+      <div v-if="status === 'live'" class="w-full flex items-center justify-center gap-1 h-12 sm:h-16 mt-2">
+        <div
+          v-for="(bar, i) in waveformBars"
+          :key="i"
+          class="waveform-bar w-1.5 rounded-full"
+          :class="bar.bgClass"
+          :style="{ height: bar.height, animationDelay: bar.delay }"
+        ></div>
+      </div>
+      <div v-else class="h-12 sm:h-16 mt-2"></div>
+
+      <!-- Lesson Material Card (visible when live) -->
+      <div v-if="showLessonMaterial" class="w-full max-w-sm mx-auto rounded-3xl bg-primary/10 border border-primary/20 flex flex-col justify-center px-5 sm:px-8 py-8 sm:py-16">
+        <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6 text-center">Lesson Material</h3>
+        <p class="text-slate-700 dark:text-slate-200 text-sm leading-relaxed text-center font-medium">
+          {{ materialDisplayText }}
+        </p>
+      </div>
+      <div v-else class="flex-1"></div>
+
+      <!-- Status Text -->
+      <div class="w-full max-w-xs mx-auto mb-4">
+        <p v-if="status === 'live'" class="text-slate-500 dark:text-slate-400 text-sm italic font-light leading-relaxed text-center tracking-wide">
+          {{ statusDisplayText }}
+        </p>
+      </div>
+    </main>
+
+    <!-- Control Bar -->
     <ControlBar
       :call-active="isCallActive"
       @toggleCall="toggleCall"
@@ -36,49 +76,60 @@
       @toggleMenu="toggleMenu"
     />
 
+    <!-- Deco blur circles -->
+    <div class="absolute -top-24 -right-24 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-secondary/5 rounded-full blur-3xl pointer-events-none"></div>
+
+    <!-- Chat Panel -->
     <ChatPanel
       :open="isChatOpen"
       :log="mergedConversationLog"
       @close="toggleChat"
     />
 
-    <section class="settings-sheet" :class="{ open: isSettingsOpen }">
-      <div class="panel-header">
+    <!-- Settings Sheet -->
+    <section
+      class="absolute left-0 right-0 bottom-0 z-30 bg-white/95 dark:bg-background-dark/95 rounded-t-3xl border-t border-secondary/20 shadow-xl p-4 sm:p-5 transition-transform duration-300"
+      :class="isSettingsOpen ? 'translate-y-0' : 'translate-y-[105%]'"
+    >
+      <div class="flex items-center justify-between text-slate-800 dark:text-white font-bold">
         <span>Session Settings</span>
-        <button class="secondary-btn" @click="toggleMenu">Close</button>
+        <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="toggleMenu">Close</button>
       </div>
-      <div class="settings-actions">
-        <button class="secondary-btn" @click="resetSession">New session</button>
-        <button class="secondary-btn" @click="playLastTts">Play Last TTS</button>
+      <div class="flex flex-wrap gap-2.5 mt-3">
+        <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="resetSession">New session</button>
+        <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="playLastTts">Play Last TTS</button>
         <button
           v-if="isDebugModeEnabled"
-          class="secondary-btn"
+          class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors"
           @click="openAdminPanel"
         >
           Admin Mode
         </button>
       </div>
-      <div class="analysis-box">
+      <div class="mt-4 bg-primary/5 border border-primary/10 rounded-xl text-slate-500 dark:text-slate-400 text-xs leading-relaxed p-3">
         {{ analysis || "End the call to request analysis." }}
       </div>
     </section>
+
+    <!-- Admin Panel -->
     <section
       v-if="isDebugModeEnabled && isAdminPanelOpen"
-      class="admin-overlay"
+      class="fixed inset-3 z-[90] grid place-items-center bg-slate-900/30 backdrop-blur-sm"
       aria-label="Admin Mode"
     >
-      <div class="admin-modal">
-        <div class="panel-header">
+      <div class="w-full max-w-5xl h-[min(90vh,calc(100dvh-32px))] bg-white dark:bg-slate-900 rounded-2xl border border-secondary/20 shadow-2xl p-4 flex flex-col gap-3">
+        <div class="flex items-center justify-between text-slate-800 dark:text-white font-bold">
           <span>Admin Mode</span>
-          <button class="secondary-btn" @click="closeAdminPanel">Close</button>
+          <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="closeAdminPanel">Close</button>
         </div>
-        <div class="admin-stack">
-          <label class="field admin-field">
-            <div class="admin-field-header">
-              <span>System Prompt</span>
+        <div class="flex-1 min-h-0 grid grid-rows-2 gap-3">
+          <label class="flex flex-col gap-1.5 min-h-0">
+            <div class="flex items-center justify-between gap-2.5">
+              <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">System Prompt</span>
               <button
                 type="button"
-                class="secondary-btn admin-reset-btn"
+                class="px-2.5 py-1 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold hover:bg-secondary/10 transition-colors"
                 @click="resetAdminPrompt"
               >
                 Reset
@@ -86,14 +137,14 @@
             </div>
             <textarea
               v-model="adminPrompt"
-              class="admin-textarea"
+              class="w-full h-full min-h-0 resize-none border border-secondary/20 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl p-3 text-xs leading-relaxed font-mono"
               spellcheck="false"
             ></textarea>
           </label>
-          <label class="field admin-field">
-            <span>Console Logs</span>
+          <label class="flex flex-col gap-1.5 min-h-0">
+            <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Console Logs</span>
             <textarea
-              class="admin-textarea admin-logarea"
+              class="w-full h-full min-h-0 resize-none border border-slate-700 bg-slate-900 text-slate-300 rounded-xl p-3 text-xs leading-relaxed font-mono"
               :value="adminLogText"
               readonly
               spellcheck="false"
@@ -107,7 +158,6 @@
 
 <script setup>
 import { ref, computed, onBeforeUnmount } from "vue";
-import Avatar from "./Avatar.vue";
 import ControlBar from "./ControlBar.vue";
 import ChatPanel from "./ChatPanel.vue";
 import { GeminiLiveSession } from "../services/geminiLive";
@@ -131,6 +181,41 @@ const LESSON_MATERIAL_PARAGRAPHS = [
   "AI is transforming translation, with Harlequin France testing Fluent Planet's AI-assisted tools to make processes cheaper and faster for popular English-French novels.",
   "This shift sparks outrage from translator groups, who deem cutting human ties unacceptable, while other publishers seek similar AI quotes amid rising demand.",
   "Research shows translation as highly vulnerable to generative AI, potentially displacing jobs like typists. EU linguist employment rose slightly per latest data.",
+];
+
+const materialDisplayText = computed(() => LESSON_MATERIAL_PARAGRAPHS.join(" "));
+
+const statusDisplayText = computed(() => {
+  if (isUserSpeaking.value) return '"Listening..."';
+  if (isModelSpeaking.value) return '"Speaking..."';
+  return '"Listening..."';
+});
+
+const waveformBars = [
+  { height: "0.5rem", bgClass: "bg-primary/20", delay: "0.1s" },
+  { height: "0.75rem", bgClass: "bg-primary/30", delay: "0.2s" },
+  { height: "1rem", bgClass: "bg-primary/40", delay: "0.3s" },
+  { height: "1.5rem", bgClass: "bg-primary/50", delay: "0.4s" },
+  { height: "0.75rem", bgClass: "bg-primary/60", delay: "0.5s" },
+  { height: "1.25rem", bgClass: "bg-primary/70", delay: "0.6s" },
+  { height: "2rem", bgClass: "bg-primary", delay: "0.7s" },
+  { height: "1.5rem", bgClass: "bg-primary/80", delay: "0.8s" },
+  { height: "1.75rem", bgClass: "bg-primary/60", delay: "0.9s" },
+  { height: "1rem", bgClass: "bg-primary/40", delay: "1.0s" },
+  { height: "1.5rem", bgClass: "bg-primary/60", delay: "1.1s" },
+  { height: "2rem", bgClass: "bg-primary", delay: "0.2s" },
+  { height: "1.25rem", bgClass: "bg-primary/70", delay: "0.3s" },
+  { height: "1.75rem", bgClass: "bg-primary/50", delay: "0.4s" },
+  { height: "0.75rem", bgClass: "bg-primary/30", delay: "0.5s" },
+  { height: "1.25rem", bgClass: "bg-primary/40", delay: "0.6s" },
+  { height: "1.75rem", bgClass: "bg-primary/60", delay: "0.7s" },
+  { height: "2rem", bgClass: "bg-primary", delay: "0.8s" },
+  { height: "1.5rem", bgClass: "bg-primary/80", delay: "0.9s" },
+  { height: "1.25rem", bgClass: "bg-primary/70", delay: "1.0s" },
+  { height: "1.75rem", bgClass: "bg-primary/50", delay: "1.1s" },
+  { height: "1rem", bgClass: "bg-primary/40", delay: "0.1s" },
+  { height: "0.75rem", bgClass: "bg-primary/30", delay: "0.2s" },
+  { height: "0.5rem", bgClass: "bg-primary/20", delay: "0.3s" },
 ];
 
 const FIXED_MODEL_ID = "gemini-2.5-flash-native-audio-preview-12-2025";
