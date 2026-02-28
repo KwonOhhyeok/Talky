@@ -9,68 +9,133 @@
       <div
         v-if="status === 'live'"
         class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20"
+        aria-live="polite"
+        aria-atomic="true"
       >
-        <span class="relative flex h-2 w-2">
+        <span class="relative flex h-2 w-2" aria-hidden="true">
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
           <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
         </span>
         <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">LIVE</span>
       </div>
-      <div v-else class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-        <span class="relative flex h-2 w-2">
-          <span class="relative inline-flex rounded-full h-2 w-2 bg-slate-400"></span>
+      <div
+        v-else
+        class="flex items-center gap-1.5 px-3 py-1 rounded-full border"
+        :class="statusBadgeClass"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <span class="relative flex h-2 w-2" aria-hidden="true">
+          <span class="relative inline-flex rounded-full h-2 w-2" :class="statusDotClass"></span>
         </span>
-        <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 tracking-wider uppercase">{{ status }}</span>
+        <span class="text-[10px] font-bold tracking-wider uppercase">{{ statusLabel }}</span>
       </div>
     </header>
 
     <!-- Connecting Overlay -->
-    <div v-if="status === 'connecting'" class="absolute inset-0 z-20 grid place-items-center pointer-events-none bg-white/40 dark:bg-background-dark/40">
-      <div class="min-w-[220px] p-5 rounded-2xl grid justify-items-center gap-2 bg-white/95 dark:bg-slate-800/95 border border-secondary/30 shadow-xl" role="status" aria-label="Connecting">
-        <span class="text-slate-800 dark:text-white text-lg font-bold tracking-tight">Connecting...</span>
-        <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold">Please wait before speaking</span>
+    <div v-if="status === 'connecting'" class="absolute inset-0 z-20 grid place-items-center bg-white/40 dark:bg-background-dark/40">
+      <div class="min-w-[220px] p-5 rounded-2xl grid justify-items-center gap-2 bg-white/95 dark:bg-slate-800/95 border border-secondary/30 shadow-xl" role="status">
+        <span class="text-slate-800 dark:text-white text-lg font-bold tracking-tight">{{ connectingStepText }}</span>
+        <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold">잠시만 기다려 주세요</span>
         <span class="inline-flex items-center gap-1.5 mt-1" aria-hidden="true">
           <i class="w-2 h-2 rounded-full bg-primary" style="animation: connecting-bounce 1s ease-in-out infinite"></i>
           <i class="w-2 h-2 rounded-full bg-primary" style="animation: connecting-bounce 1s ease-in-out infinite 0.14s"></i>
           <i class="w-2 h-2 rounded-full bg-primary" style="animation: connecting-bounce 1s ease-in-out infinite 0.28s"></i>
         </span>
+        <button
+          class="mt-3 px-5 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+          @click="cancelConnecting"
+        >
+          취소
+        </button>
       </div>
     </div>
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col items-center px-4 sm:px-6 justify-between py-4">
-      <!-- Waveform Bars (visible when live) -->
-      <div v-if="status === 'live'" class="w-full flex items-center justify-center gap-1 h-12 sm:h-16 mt-2">
-        <div
-          v-for="(bar, i) in waveformBars"
-          :key="i"
-          class="waveform-bar w-1.5 rounded-full"
-          :class="bar.bgClass"
-          :style="{ height: bar.height, animationDelay: bar.delay }"
-        ></div>
-      </div>
-      <div v-else class="h-12 sm:h-16 mt-2"></div>
+    <main class="flex-1 flex flex-col items-center px-4 sm:px-6 justify-between py-4 min-h-0">
 
-      <!-- Lesson Material Card -->
-      <div
-        v-if="showLessonMaterial"
-        class="w-full max-w-sm mx-auto rounded-3xl bg-primary/10 border border-primary/20 h-[50dvh] overflow-hidden flex flex-col px-5 sm:px-8 py-8 sm:py-16"
-      >
-        <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6 text-center shrink-0">Lesson Material</h3>
-        <div class="flex-1 min-h-0 overflow-y-auto pr-1">
-          <p class="text-slate-700 dark:text-slate-200 text-sm leading-relaxed text-center font-medium whitespace-pre-line">
-            {{ materialDisplayText }}
+      <!-- Session Summary (ended 상태) -->
+      <template v-if="status === 'ended'">
+        <div class="flex-1 w-full overflow-y-auto" style="overscroll-behavior: contain">
+          <SessionSummary
+            :duration-seconds="seconds"
+            :turn-count="conversationLog.length - sessionStartTurnCount"
+            :lesson-topic="selectedTopic"
+            @viewChat="openChat"
+            @practiceAgain="practiceAgain"
+            @newTopic="resetSession"
+          />
+        </div>
+      </template>
+
+      <!-- 에러 상태 -->
+      <template v-else-if="status === 'error' || status === 'closed'">
+        <div class="flex-1 w-full flex flex-col items-center justify-center gap-5 px-2">
+          <div class="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <span class="material-symbols-outlined text-4xl text-red-500">error</span>
+          </div>
+          <div class="text-center">
+            <h3 class="text-slate-800 dark:text-white font-bold text-lg">{{ errorInfo.title }}</h3>
+            <p class="text-slate-500 dark:text-slate-400 text-sm mt-1 leading-relaxed">{{ errorInfo.message }}</p>
+          </div>
+          <button
+            class="px-8 py-3 rounded-xl bg-primary text-slate-800 font-bold text-sm hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98] transition-all"
+            @click="startCall"
+          >
+            다시 시도
+          </button>
+        </div>
+      </template>
+
+      <!-- 일반 상태 (idle / live / connecting) -->
+      <template v-else>
+        <!-- Waveform Bars (live 또는 connecting 시) -->
+        <div
+          v-if="status === 'live' || status === 'connecting'"
+          class="w-full flex items-center justify-center gap-1 h-12 sm:h-16 mt-2"
+          aria-hidden="true"
+        >
+          <div
+            v-for="(bar, i) in waveformBars"
+            :key="i"
+            class="waveform-bar w-1.5 rounded-full transition-opacity duration-300"
+            :class="[bar.bgClass, isModelSpeaking ? 'opacity-100' : 'opacity-30']"
+            :style="{
+              height: bar.height,
+              animationDelay: bar.delay,
+              animationPlayState: isModelSpeaking ? 'running' : 'paused'
+            }"
+          ></div>
+        </div>
+        <div v-else class="h-12 sm:h-16 mt-2"></div>
+
+        <!-- Lesson Material Card -->
+        <div
+          v-if="showLessonMaterial"
+          class="w-full max-w-sm mx-auto rounded-3xl bg-primary/10 border border-primary/20 h-[50dvh] overflow-hidden flex flex-col px-5 sm:px-8 py-8 sm:py-16"
+        >
+          <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-3 text-center shrink-0">Lesson Material</h3>
+
+          <!-- idle 상태에서 행동 유도 안내 문구 -->
+          <p v-if="status === 'idle'" class="text-[11px] text-slate-400 text-center mb-4 shrink-0">
+            자료를 미리 읽어보세요. 준비되면 통화 버튼을 눌러 수업을 시작합니다.
+          </p>
+
+          <div class="flex-1 min-h-0 overflow-y-auto pr-1" style="overscroll-behavior: contain">
+            <p class="text-slate-700 dark:text-slate-200 text-sm leading-relaxed text-left font-medium whitespace-pre-line" lang="en">
+              {{ materialDisplayText }}
+            </p>
+          </div>
+        </div>
+        <div v-else class="flex-1"></div>
+
+        <!-- Status Text (live 상태에서만) -->
+        <div class="w-full max-w-xs mx-auto mb-4" aria-live="polite" aria-atomic="true">
+          <p v-if="status === 'live'" class="text-slate-500 dark:text-slate-400 text-sm italic font-light leading-relaxed text-center tracking-wide">
+            {{ statusDisplayText }}
           </p>
         </div>
-      </div>
-      <div v-else class="flex-1"></div>
-
-      <!-- Status Text -->
-      <div class="w-full max-w-xs mx-auto mb-4">
-        <p v-if="status === 'live'" class="text-slate-500 dark:text-slate-400 text-sm italic font-light leading-relaxed text-center tracking-wide">
-          {{ statusDisplayText }}
-        </p>
-      </div>
+      </template>
     </main>
 
     <!-- Control Bar -->
@@ -96,14 +161,17 @@
     <section
       class="absolute left-0 right-0 bottom-0 z-30 bg-white/95 dark:bg-background-dark/95 rounded-t-3xl border-t border-secondary/20 shadow-xl p-4 sm:p-5 transition-transform duration-300"
       :class="isSettingsOpen ? 'translate-y-0' : 'translate-y-[105%]'"
+      role="dialog"
+      aria-modal="true"
+      aria-label="설정"
     >
       <div class="flex items-center justify-between text-slate-800 dark:text-white font-bold">
-        <span>Session Settings</span>
-        <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="toggleMenu">Close</button>
+        <span>세션 설정</span>
+        <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="toggleMenu">닫기</button>
       </div>
       <div class="flex flex-wrap gap-2.5 mt-3">
-        <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="resetSession">New session</button>
-        <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="playLastTts">Play Last TTS</button>
+        <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="resetSession">새 세션 시작</button>
+        <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="playLastTts">마지막 TTS 재생</button>
         <button
           v-if="isDebugModeEnabled"
           class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors"
@@ -113,7 +181,7 @@
         </button>
       </div>
       <div class="mt-4 bg-primary/5 border border-primary/10 rounded-xl text-slate-500 dark:text-slate-400 text-xs leading-relaxed p-3">
-        {{ analysis || "End the call to request analysis." }}
+        {{ analysis || "통화를 종료하면 분석을 요청합니다." }}
       </div>
     </section>
 
@@ -159,10 +227,39 @@
       </div>
     </section>
 
+    <!-- 통화 종료 확인 다이얼로그 -->
+    <div
+      v-if="showEndCallConfirm"
+      class="fixed inset-0 z-[80] grid place-items-center bg-slate-900/40 backdrop-blur-sm px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="통화 종료 확인"
+    >
+      <div class="w-full max-w-xs bg-white dark:bg-slate-900 rounded-2xl border border-secondary/20 shadow-2xl p-6">
+        <h3 class="text-slate-800 dark:text-white font-bold text-center">수업을 끝내시겠습니까?</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm text-center mt-1.5">종료하면 세션 요약을 확인할 수 있어요.</p>
+        <div class="flex gap-3 mt-5">
+          <button
+            class="flex-1 py-2.5 rounded-xl border border-secondary/20 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-sm hover:bg-secondary/10 transition-colors"
+            @click="showEndCallConfirm = false"
+          >
+            계속하기
+          </button>
+          <button
+            class="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-colors"
+            @click="confirmEndCall"
+          >
+            종료
+          </button>
+        </div>
+      </div>
+    </div>
+
     <InterestPopup
       v-if="showInterestPopup && status === 'idle'"
       :is-loading="isGeneratingLesson"
       :error-message="lessonGenerationError"
+      :loading-step="lessonGenerationStep"
       @start="handleInterestStart"
     />
   </div>
@@ -173,6 +270,7 @@ import { ref, computed, onBeforeUnmount } from "vue";
 import ControlBar from "./ControlBar.vue";
 import ChatPanel from "./ChatPanel.vue";
 import InterestPopup from "./InterestPopup.vue";
+import SessionSummary from "./SessionSummary.vue";
 import { GeminiLiveSession } from "../services/geminiLive";
 import { SessionArchive } from "../services/sessionArchive";
 import { generateLesson } from "../services/lessonGenerator";
@@ -181,6 +279,7 @@ import {
   DEFAULT_SYSTEM_INSTRUCTION,
   buildSystemInstruction,
 } from "../config/systemPrompt";
+import { classifyError, getDisconnectedError } from "../utils/errorClassifier";
 
 const timer = ref("00:00");
 const seconds = ref(0);
@@ -198,12 +297,56 @@ const showInterestPopup = ref(true);
 const lessonMaterial = ref("");
 const isGeneratingLesson = ref(false);
 const lessonGenerationError = ref("");
+const lessonGenerationStep = ref(0);
+const selectedTopic = ref("");
 const materialDisplayText = computed(() => lessonMaterial.value.trim());
+const connectingStep = ref("");
+const errorInfo = ref({ type: "", title: "오류 발생", message: "다시 시도해 주세요.", actions: ["retry"] });
+const showEndCallConfirm = ref(false);
+const sessionStartTurnCount = ref(0);
+
+// ---- 상태 라벨 매핑 ----
+const STATUS_LABELS = {
+  idle: "대기",
+  connecting: "연결 중",
+  live: "LIVE",
+  ended: "수업 완료",
+  error: "오류",
+  closed: "연결 끊김",
+};
+
+const statusLabel = computed(() => STATUS_LABELS[status.value] ?? status.value);
+
+const statusBadgeClass = computed(() => {
+  switch (status.value) {
+    case "ended":
+      return "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400";
+    case "error":
+    case "closed":
+      return "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-500 dark:text-red-400";
+    case "connecting":
+      return "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400";
+    default:
+      return "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400";
+  }
+});
+
+const statusDotClass = computed(() => {
+  switch (status.value) {
+    case "ended": return "bg-emerald-500";
+    case "error": case "closed": return "bg-red-500";
+    case "connecting": return "bg-amber-400";
+    default: return "bg-slate-400";
+  }
+});
+
+// ---- 연결 단계 텍스트 ----
+const connectingStepText = computed(() => connectingStep.value || "연결 중...");
 
 const statusDisplayText = computed(() => {
-  if (isUserSpeaking.value) return '"Listening..."';
-  if (isModelSpeaking.value) return '"Speaking..."';
-  return '"Listening..."';
+  if (isModelSpeaking.value) return "선생님이 말하고 있어요";
+  if (isUserSpeaking.value) return "선생님이 듣고 있어요";
+  return "선생님이 듣고 있어요";
 });
 
 const waveformBars = [
@@ -305,10 +448,17 @@ const session = new GeminiLiveSession({
   },
   onStatus: (state) => {
     if (state === "error") {
-      status.value = "error";
+      // 취소/정상 종료 후 세션이 뒤늦게 error를 발생시키면 무시
+      if (status.value === "connecting" || status.value === "live") {
+        errorInfo.value = { type: "session-error", title: "세션 오류", message: "세션 중 오류가 발생했습니다. 다시 시도해 주세요.", actions: ["retry"] };
+        status.value = "error";
+      }
     }
     if (state === "closed") {
-      status.value = "closed";
+      if (status.value === "live") {
+        errorInfo.value = getDisconnectedError();
+        status.value = "closed";
+      }
       isUserSpeaking.value = false;
       isModelSpeaking.value = false;
     }
@@ -334,7 +484,7 @@ const isCallActive = computed(
 const showLessonMaterial = computed(
   () =>
     Boolean(lessonMaterial.value.trim()) &&
-    (status.value === "idle" || status.value === "live")
+    (status.value === "idle" || status.value === "live" || status.value === "connecting")
 );
 const mergedConversationLog = computed(() => conversationLog.value);
 
@@ -393,6 +543,13 @@ async function handleInterestStart(interest) {
 
   lessonGenerationError.value = "";
   isGeneratingLesson.value = true;
+  lessonGenerationStep.value = 0;
+  selectedTopic.value = topic;
+
+  // 단계별 메시지 업데이트
+  const stepTimer1 = setTimeout(() => { lessonGenerationStep.value = 1; }, 3000);
+  const stepTimer2 = setTimeout(() => { lessonGenerationStep.value = 2; }, 8000);
+
   try {
     const generatedLesson = await generateLesson(topic, { apiBase });
     const resolvedLesson = generatedLesson.trim() || DEFAULT_LESSON_MATERIAL;
@@ -411,7 +568,10 @@ async function handleInterestStart(interest) {
     adminPrompt.value = buildSystemInstruction(DEFAULT_LESSON_MATERIAL);
     showInterestPopup.value = false;
   } finally {
+    clearTimeout(stepTimer1);
+    clearTimeout(stepTimer2);
     isGeneratingLesson.value = false;
+    lessonGenerationStep.value = 0;
   }
 }
 
@@ -424,6 +584,7 @@ async function startCall() {
   }
   const requestSeq = ++callRequestSeq;
   status.value = "connecting";
+  connectingStep.value = "마이크 연결 중...";
   session.setSystemInstruction(adminPrompt.value);
   try {
     console.log("[CallScreen] startCall:begin", { requestSeq });
@@ -435,6 +596,7 @@ async function startCall() {
       return;
     }
 
+    connectingStep.value = "세션 준비 중...";
     const createController = new AbortController();
     const createTimeoutId = window.setTimeout(
       () => createController.abort(),
@@ -456,6 +618,7 @@ async function startCall() {
       return;
     }
     archiveReady.value = true;
+    connectingStep.value = "토큰 발급 중...";
     console.log("[CallScreen] startCall:tokenRequest");
     const response = await postJsonWithTimeout(
       tokenApiUrl,
@@ -476,6 +639,7 @@ async function startCall() {
       session.stop();
       return;
     }
+    connectingStep.value = "선생님 연결 중...";
     console.log("[CallScreen] startCall:connect");
     await session.connect({
       modelId: FIXED_MODEL_ID,
@@ -485,16 +649,27 @@ async function startCall() {
       session.stop();
       return;
     }
+    sessionStartTurnCount.value = conversationLog.value.length;
     status.value = "live";
+    connectingStep.value = "";
     console.log("[CallScreen] startCall:live");
     startTimer();
   } catch (err) {
     console.error("[CallScreen] startCall failed", err);
     if (requestSeq === callRequestSeq) {
       session.stop();
+      errorInfo.value = classifyError(err);
       status.value = "error";
+      connectingStep.value = "";
     }
   }
+}
+
+function cancelConnecting() {
+  callRequestSeq += 1;
+  session.stop();
+  status.value = "idle";
+  connectingStep.value = "";
 }
 
 async function endCall() {
@@ -521,6 +696,11 @@ async function toggleCall() {
   isCallTransitioning.value = true;
   try {
     if (isCallActive.value) {
+      // 5분 미만 통화 시 확인 다이얼로그 표시
+      if (status.value === "live" && seconds.value < 300) {
+        showEndCallConfirm.value = true;
+        return;
+      }
       await endCall();
       return;
     }
@@ -528,6 +708,21 @@ async function toggleCall() {
   } finally {
     isCallTransitioning.value = false;
   }
+}
+
+async function confirmEndCall() {
+  showEndCallConfirm.value = false;
+  isCallTransitioning.value = true;
+  try {
+    await endCall();
+  } finally {
+    isCallTransitioning.value = false;
+  }
+}
+
+function openChat() {
+  isChatOpen.value = true;
+  isSettingsOpen.value = false;
 }
 
 function toggleChat() {
@@ -581,6 +776,19 @@ async function analyzeConversation() {
   }
 }
 
+function practiceAgain() {
+  // 타이머/상태만 초기화하고 같은 레슨 소재로 다시 시작
+  analysis.value = "";
+  status.value = "idle";
+  stopTimer();
+  seconds.value = 0;
+  timer.value = formatTime(0);
+  sessionId.value =
+    crypto.randomUUID?.() || `session-${Date.now().toString(36)}`;
+  archiveReady.value = false;
+  startCall();
+}
+
 function resetSession() {
   conversationLog.value = [];
   analysis.value = "";
@@ -597,6 +805,7 @@ function resetSession() {
   isGeneratingLesson.value = false;
   showInterestPopup.value = true;
   adminPrompt.value = DEFAULT_SYSTEM_INSTRUCTION;
+  selectedTopic.value = "";
 }
 
 async function playLastTts() {
@@ -633,7 +842,11 @@ function loadLog(id) {
 }
 
 function saveLog(id, log) {
-  localStorage.setItem(`talky:session:${id}`, JSON.stringify(log));
+  try {
+    localStorage.setItem(`talky:session:${id}`, JSON.stringify(log));
+  } catch (err) {
+    console.error("[CallScreen] saveLog failed", err);
+  }
 }
 
 function appendConversationEntry(entry) {
