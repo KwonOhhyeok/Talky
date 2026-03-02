@@ -3,16 +3,17 @@ export default {
   content: ["./index.html", "./src/**/*.{vue,js,ts,jsx,tsx}"],
   darkMode: "class",
   theme: {
+    colors: {
+      transparent: "transparent",
+      current: "currentColor",
+      red:    "#D00000",
+      yellow: "#FFBA08",
+      blue:   "#3F88C5",
+      navy:   "#032B43",
+      teal:   "#136F63",
+      white:  "#FFFFFF",
+    },
     extend: {
-      colors: {
-        primary: "#9CF6F6",
-        secondary: "#B5D6D6",
-        "accent-1": "#FF7477",
-        "accent-2": "#E69597",
-        "accent-3": "#CEB5B7",
-        "background-light": "#FFFFFF",
-        "background-dark": "#0F1717",
-      },
       fontFamily: {
         display: ["Lexend", "sans-serif"],
       },

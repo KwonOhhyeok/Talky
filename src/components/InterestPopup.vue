@@ -1,6 +1,6 @@
 <template>
   <div
-    class="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 backdrop-blur-sm px-4"
+    class="fixed inset-0 z-50 grid place-items-center bg-navy/40 backdrop-blur-sm px-4"
     role="dialog"
     aria-modal="true"
     aria-label="관심사 선택"
@@ -9,13 +9,13 @@
     <div
       ref="panelRef"
       tabindex="-1"
-      class="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl border border-secondary/20 shadow-2xl p-6 sm:p-8 outline-none"
+      class="w-full max-w-sm bg-white dark:bg-navy rounded-3xl border border-navy/10 dark:border-white/10 shadow-2xl p-6 sm:p-8 outline-none"
     >
       <!-- Header -->
-      <h2 class="text-slate-800 dark:text-white text-lg font-bold tracking-tight text-center">
+      <h2 class="text-navy dark:text-white text-lg font-bold tracking-tight text-center">
         어떤 주제로 이야기할까요?
       </h2>
-      <p class="text-slate-500 dark:text-slate-400 text-xs text-center mt-1.5 leading-relaxed">
+      <p class="text-navy/60 dark:text-white/60 text-xs text-center mt-1.5 leading-relaxed">
         주제를 선택하거나 직접 입력해 보세요
       </p>
 
@@ -25,42 +25,61 @@
           v-for="chip in chips"
           :key="chip"
           role="option"
-          :aria-selected="interest === chip"
+          :aria-selected="selectedChip === chip"
           class="px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200"
-          :class="interest === chip
-            ? 'bg-primary text-slate-800 shadow-md shadow-primary/25'
-            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-primary/10 hover:border-primary/30'"
-          @click="interest = chip"
+          :class="selectedChip === chip
+            ? 'bg-blue text-white shadow-md shadow-blue/25'
+            : 'bg-navy/5 dark:bg-white/5 text-navy dark:text-white border border-navy/10 dark:border-white/10 hover:bg-blue/10 hover:border-blue/30'"
+          @click="handleChipSelect(chip)"
         >
           {{ chip }}
         </button>
       </div>
 
+      <!-- Divider -->
+      <div class="flex items-center gap-3 mt-5">
+        <div class="flex-1 border-t border-navy/20 dark:border-white/10"></div>
+        <span class="text-[10px] font-semibold text-navy/40 dark:text-white/30 uppercase tracking-widest">직접 입력</span>
+        <div class="flex-1 border-t border-navy/20 dark:border-white/10"></div>
+      </div>
+
       <!-- Text Input -->
-      <div class="mt-5">
+      <div class="mt-3 relative">
+        <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-navy/30 dark:text-white/30 pointer-events-none material-symbols-outlined text-base">edit</span>
         <input
-          v-model="interest"
+          ref="inputRef"
+          v-model="customInput"
           type="text"
-          :placeholder="placeholderText"
-          class="w-full px-4 py-3 rounded-xl border border-secondary/20 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
+          placeholder="주제를 직접 입력하세요 (예: 영화 추천, 요리 레시피)"
+          class="w-full pl-9 pr-10 py-3 rounded-xl border border-navy/10 dark:border-white/10 bg-navy/5 dark:bg-white/5 text-navy dark:text-white text-sm placeholder:text-navy/40 dark:placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-blue/40 focus:border-blue/40 transition-all"
+          @focus="handleInputFocus"
           @keydown.enter="handleStart"
         />
+        <button
+          v-if="customInput"
+          type="button"
+          class="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-navy/40 dark:text-white/40 hover:bg-navy/10 dark:hover:bg-white/10 hover:text-navy dark:hover:text-white transition-colors"
+          aria-label="입력값 지우기"
+          @click="clearCustomInput"
+        >
+          <span class="material-symbols-outlined text-sm">close</span>
+        </button>
       </div>
 
       <!-- Start Button -->
       <button
-        :disabled="!interest.trim() || isLoading"
+        :disabled="!finalTopic || isLoading"
         class="w-full mt-5 py-3 rounded-xl text-sm font-bold transition-all duration-200"
-        :class="interest.trim() && !isLoading
-          ? 'bg-primary text-slate-800 shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98]'
-          : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'"
+        :class="finalTopic && !isLoading
+          ? 'bg-blue text-white shadow-lg shadow-blue/25 hover:shadow-xl hover:shadow-blue/30 active:scale-[0.98]'
+          : 'bg-navy/10 dark:bg-white/10 text-navy/30 dark:text-white/30 cursor-not-allowed'"
         @click="handleStart"
       >
         <span v-if="isLoading" class="inline-flex items-center gap-2">
           <span class="inline-flex items-center gap-1" aria-hidden="true">
-            <i class="w-1.5 h-1.5 rounded-full bg-slate-600" style="animation: connecting-bounce 1s ease-in-out infinite"></i>
-            <i class="w-1.5 h-1.5 rounded-full bg-slate-600" style="animation: connecting-bounce 1s ease-in-out infinite 0.14s"></i>
-            <i class="w-1.5 h-1.5 rounded-full bg-slate-600" style="animation: connecting-bounce 1s ease-in-out infinite 0.28s"></i>
+            <i class="w-1.5 h-1.5 rounded-full bg-white" style="animation: connecting-bounce 1s ease-in-out infinite"></i>
+            <i class="w-1.5 h-1.5 rounded-full bg-white" style="animation: connecting-bounce 1s ease-in-out infinite 0.14s"></i>
+            <i class="w-1.5 h-1.5 rounded-full bg-white" style="animation: connecting-bounce 1s ease-in-out infinite 0.28s"></i>
           </span>
           {{ loadingStepText }}
         </span>
@@ -68,7 +87,7 @@
       </button>
 
       <!-- Error Message -->
-      <p v-if="errorMessage" class="text-red-500 text-xs text-center mt-3" role="alert">
+      <p v-if="errorMessage" class="text-red text-xs text-center mt-3" role="alert">
         {{ errorMessage }}
       </p>
     </div>
@@ -76,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted } from "vue";
 
 const props = defineProps({
   isLoading: { type: Boolean, default: false },
@@ -87,6 +106,7 @@ const props = defineProps({
 const emit = defineEmits(["start"]);
 
 const panelRef = ref(null);
+const inputRef = ref(null);
 
 const chips = [
   "AI가 번역가 일자리를 대체할까?",
@@ -106,20 +126,31 @@ const loadingStepText = computed(() => {
 });
 
 const STORAGE_KEY = "talky:last_interest";
-const lastInterest = localStorage.getItem(STORAGE_KEY) || "";
-const interest = ref(lastInterest);
 
-const placeholderText = computed(() =>
-  lastInterest && !interest.value
-    ? `최근 입력한 관심사: ${lastInterest}`
-    : "오늘 대화하고 싶은 주제를 입력하세요"
-);
+const selectedChip = ref("");
+const customInput = ref("");
+
+const finalTopic = computed(() => customInput.value.trim() || selectedChip.value);
+
+function handleChipSelect(chip) {
+  selectedChip.value = chip;
+  customInput.value = "";
+}
+
+function handleInputFocus() {
+  selectedChip.value = "";
+}
+
+function clearCustomInput() {
+  customInput.value = "";
+  inputRef.value?.focus();
+}
 
 function handleStart() {
-  const trimmed = interest.value.trim();
-  if (!trimmed || props.isLoading) return;
-  localStorage.setItem(STORAGE_KEY, trimmed);
-  emit("start", trimmed);
+  const topic = finalTopic.value;
+  if (!topic || props.isLoading) return;
+  localStorage.setItem(STORAGE_KEY, topic);
+  emit("start", topic);
 }
 
 function handleEscape() {

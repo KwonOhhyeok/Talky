@@ -2,21 +2,21 @@
   <div class="relative flex h-dvh w-full max-w-md mx-auto flex-col overflow-hidden font-display">
     <!-- Header -->
     <header class="flex items-center p-3 sm:p-6 pt-[max(0.75rem,env(safe-area-inset-top))] justify-between shrink-0">
-      <div class="flex items-baseline gap-1.5 px-3 py-1.5 rounded-full bg-secondary/10 border border-secondary/20">
-        <span class="text-sm font-bold text-slate-800 dark:text-white">{{ timer }}</span>
+      <div class="flex items-baseline gap-1.5 px-3 py-1.5 rounded-full bg-navy/10 border border-navy/20 dark:bg-white/10 dark:border-white/20">
+        <span class="text-sm font-bold text-navy dark:text-white">{{ timer }}</span>
       </div>
-      <h2 class="text-slate-800 dark:text-slate-100 text-sm font-semibold tracking-widest uppercase">Talky Live</h2>
+      <h2 class="text-navy dark:text-white text-sm font-semibold tracking-widest uppercase">Talky Live</h2>
       <div
         v-if="status === 'live'"
-        class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20"
+        class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal/10 border border-teal/20"
         aria-live="polite"
         aria-atomic="true"
       >
         <span class="relative flex h-2 w-2" aria-hidden="true">
-          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-teal"></span>
         </span>
-        <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">LIVE</span>
+        <span class="text-[10px] font-bold text-teal tracking-wider">LIVE</span>
       </div>
       <div
         v-else
@@ -33,17 +33,17 @@
     </header>
 
     <!-- Connecting Overlay -->
-    <div v-if="status === 'connecting'" class="absolute inset-0 z-20 grid place-items-center bg-white/40 dark:bg-background-dark/40">
-      <div class="min-w-[220px] p-5 rounded-2xl grid justify-items-center gap-2 bg-white/95 dark:bg-slate-800/95 border border-secondary/30 shadow-xl" role="status">
-        <span class="text-slate-800 dark:text-white text-lg font-bold tracking-tight">{{ connectingStepText }}</span>
-        <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold">잠시만 기다려 주세요</span>
+    <div v-if="status === 'connecting'" class="absolute inset-0 z-20 grid place-items-center bg-white/40 dark:bg-navy/40">
+      <div class="min-w-[220px] p-5 rounded-2xl grid justify-items-center gap-2 bg-white dark:bg-navy border border-navy/10 dark:border-white/10 shadow-xl" role="status">
+        <span class="text-navy dark:text-white text-lg font-bold tracking-tight">{{ connectingStepText }}</span>
+        <span class="text-navy/60 dark:text-white/60 text-xs font-semibold">잠시만 기다려 주세요</span>
         <span class="inline-flex items-center gap-1.5 mt-1" aria-hidden="true">
-          <i class="w-2 h-2 rounded-full bg-primary" style="animation: connecting-bounce 1s ease-in-out infinite"></i>
-          <i class="w-2 h-2 rounded-full bg-primary" style="animation: connecting-bounce 1s ease-in-out infinite 0.14s"></i>
-          <i class="w-2 h-2 rounded-full bg-primary" style="animation: connecting-bounce 1s ease-in-out infinite 0.28s"></i>
+          <i class="w-2 h-2 rounded-full bg-yellow" style="animation: connecting-bounce 1s ease-in-out infinite"></i>
+          <i class="w-2 h-2 rounded-full bg-yellow" style="animation: connecting-bounce 1s ease-in-out infinite 0.14s"></i>
+          <i class="w-2 h-2 rounded-full bg-yellow" style="animation: connecting-bounce 1s ease-in-out infinite 0.28s"></i>
         </span>
         <button
-          class="mt-3 px-5 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+          class="mt-3 px-5 py-2 rounded-lg bg-navy/10 dark:bg-white/10 text-navy dark:text-white text-xs font-bold hover:bg-navy/20 dark:hover:bg-white/20 transition-colors"
           @click="cancelConnecting"
         >
           취소
@@ -71,15 +71,15 @@
       <!-- 에러 상태 -->
       <template v-else-if="status === 'error' || status === 'closed'">
         <div class="flex-1 w-full flex flex-col items-center justify-center gap-5 px-2">
-          <div class="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-            <span class="material-symbols-outlined text-4xl text-red-500">error</span>
+          <div class="w-16 h-16 rounded-full bg-red/10 flex items-center justify-center">
+            <span class="material-symbols-outlined text-4xl text-red">error</span>
           </div>
           <div class="text-center">
-            <h3 class="text-slate-800 dark:text-white font-bold text-lg">{{ errorInfo.title }}</h3>
-            <p class="text-slate-500 dark:text-slate-400 text-sm mt-1 leading-relaxed">{{ errorInfo.message }}</p>
+            <h3 class="text-navy dark:text-white font-bold text-lg">{{ errorInfo.title }}</h3>
+            <p class="text-navy/60 dark:text-white/60 text-sm mt-1 leading-relaxed">{{ errorInfo.message }}</p>
           </div>
           <button
-            class="px-8 py-3 rounded-xl bg-primary text-slate-800 font-bold text-sm hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98] transition-all"
+            class="px-8 py-3 rounded-xl bg-blue text-white font-bold text-sm hover:shadow-lg hover:shadow-blue/25 active:scale-[0.98] transition-all"
             @click="startCall"
           >
             다시 시도
@@ -112,17 +112,17 @@
         <!-- Lesson Material Card -->
         <div
           v-if="showLessonMaterial"
-          class="w-full max-w-sm mx-auto rounded-3xl bg-primary/10 border border-primary/20 h-[50dvh] overflow-hidden flex flex-col px-5 sm:px-8 py-8 sm:py-16"
+          class="w-full max-w-sm mx-auto rounded-3xl bg-navy/5 border border-navy/10 dark:bg-white/5 dark:border-white/10 h-[50dvh] overflow-hidden flex flex-col px-5 sm:px-8 py-8 sm:py-16"
         >
-          <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-3 text-center shrink-0">Lesson Material</h3>
+          <h3 class="text-[10px] font-bold text-navy/40 dark:text-white/40 uppercase tracking-[0.2em] mb-3 text-center shrink-0">Lesson Material</h3>
 
           <!-- idle 상태에서 행동 유도 안내 문구 -->
-          <p v-if="status === 'idle'" class="text-[11px] text-slate-400 text-center mb-4 shrink-0">
+          <p v-if="status === 'idle'" class="text-[11px] text-navy/40 dark:text-white/40 text-center mb-4 shrink-0">
             자료를 미리 읽어보세요. 준비되면 통화 버튼을 눌러 수업을 시작합니다.
           </p>
 
           <div class="flex-1 min-h-0 overflow-y-auto pr-1" style="overscroll-behavior: contain">
-            <p class="text-slate-700 dark:text-slate-200 text-sm leading-relaxed text-left font-medium whitespace-pre-line" lang="en">
+            <p class="text-navy dark:text-white text-sm leading-relaxed text-left font-medium whitespace-pre-line" lang="en">
               {{ materialDisplayText }}
             </p>
           </div>
@@ -131,9 +131,31 @@
 
         <!-- Status Text (live 상태에서만) -->
         <div class="w-full max-w-xs mx-auto mb-4" aria-live="polite" aria-atomic="true">
-          <p v-if="status === 'live'" class="text-slate-500 dark:text-slate-400 text-sm italic font-light leading-relaxed text-center tracking-wide">
+          <p v-if="status === 'live'" class="text-navy/60 dark:text-white/60 text-sm italic font-light leading-relaxed text-center tracking-wide">
             {{ statusDisplayText }}
           </p>
+          <transition name="hint-fade">
+            <div
+              v-if="status === 'live' && isFirstLiveHint"
+              class="w-full mt-2 px-4 py-3 rounded-2xl bg-yellow/10 border border-yellow/30 text-center cursor-pointer"
+              role="status"
+              aria-live="polite"
+              tabindex="0"
+              @click="dismissFirstLiveHint"
+              @keydown.enter.prevent="dismissFirstLiveHint"
+              @keydown.space.prevent="dismissFirstLiveHint"
+            >
+              <p class="text-navy dark:text-white text-xs font-semibold leading-relaxed">
+                👋 가볍게 인사해 보세요!
+              </p>
+              <p class="text-navy/60 dark:text-white/50 text-[11px] mt-0.5">
+                예: "Hi Jesica! I'm [이름]."
+              </p>
+              <p class="text-navy/40 dark:text-white/30 text-[10px] mt-1">
+                선생님이 대화를 이끌어 드릴게요.
+              </p>
+            </div>
+          </transition>
         </div>
       </template>
     </main>
@@ -147,8 +169,8 @@
     />
 
     <!-- Deco blur circles -->
-    <div class="absolute -top-24 -right-24 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
-    <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-secondary/5 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -top-24 -right-24 w-64 h-64 bg-blue/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-teal/10 rounded-full blur-3xl pointer-events-none"></div>
 
     <!-- Chat Panel -->
     <ChatPanel
@@ -159,28 +181,28 @@
 
     <!-- Settings Sheet -->
     <section
-      class="absolute left-0 right-0 bottom-0 z-30 bg-white/95 dark:bg-background-dark/95 rounded-t-3xl border-t border-secondary/20 shadow-xl p-4 sm:p-5 transition-transform duration-300"
+      class="absolute left-0 right-0 bottom-0 z-30 bg-white/95 dark:bg-navy/95 rounded-t-3xl border-t border-navy/10 dark:border-white/10 shadow-xl p-4 sm:p-5 transition-transform duration-300"
       :class="isSettingsOpen ? 'translate-y-0' : 'translate-y-[105%]'"
       role="dialog"
       aria-modal="true"
       aria-label="설정"
     >
-      <div class="flex items-center justify-between text-slate-800 dark:text-white font-bold">
+      <div class="flex items-center justify-between text-navy dark:text-white font-bold">
         <span>세션 설정</span>
-        <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="toggleMenu">닫기</button>
+        <button class="px-3 py-1.5 rounded-lg border border-navy/10 dark:border-white/10 bg-white dark:bg-navy text-navy dark:text-white text-xs font-bold hover:bg-navy/10 dark:hover:bg-white/10 transition-colors" @click="toggleMenu">닫기</button>
       </div>
       <div class="flex flex-wrap gap-2.5 mt-3">
-        <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="resetSession">새 세션 시작</button>
-        <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="playLastTts">마지막 TTS 재생</button>
+        <button class="px-3 py-1.5 rounded-lg border border-navy/10 dark:border-white/10 bg-white dark:bg-navy text-navy dark:text-white text-xs font-bold hover:bg-navy/10 dark:hover:bg-white/10 transition-colors" @click="resetSession">새 세션 시작</button>
+        <button class="px-3 py-1.5 rounded-lg border border-navy/10 dark:border-white/10 bg-white dark:bg-navy text-navy dark:text-white text-xs font-bold hover:bg-navy/10 dark:hover:bg-white/10 transition-colors" @click="playLastTts">마지막 TTS 재생</button>
         <button
           v-if="isDebugModeEnabled"
-          class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors"
+          class="px-3 py-1.5 rounded-lg border border-navy/10 dark:border-white/10 bg-white dark:bg-navy text-navy dark:text-white text-xs font-bold hover:bg-navy/10 dark:hover:bg-white/10 transition-colors"
           @click="openAdminPanel"
         >
           Admin Mode
         </button>
       </div>
-      <div class="mt-4 bg-primary/5 border border-primary/10 rounded-xl text-slate-500 dark:text-slate-400 text-xs leading-relaxed p-3">
+      <div class="mt-4 bg-blue/5 border border-blue/10 rounded-xl text-navy/60 dark:text-white/60 text-xs leading-relaxed p-3">
         {{ analysis || "통화를 종료하면 분석을 요청합니다." }}
       </div>
     </section>
@@ -188,21 +210,21 @@
     <!-- Admin Panel -->
     <section
       v-if="isDebugModeEnabled && isAdminPanelOpen"
-      class="fixed inset-3 z-[90] grid place-items-center bg-slate-900/30 backdrop-blur-sm"
+      class="fixed inset-3 z-[90] grid place-items-center bg-navy/40 backdrop-blur-sm"
       aria-label="Admin Mode"
     >
-      <div class="w-full max-w-5xl h-[min(90vh,calc(100dvh-32px))] bg-white dark:bg-slate-900 rounded-2xl border border-secondary/20 shadow-2xl p-4 flex flex-col gap-3">
-        <div class="flex items-center justify-between text-slate-800 dark:text-white font-bold">
+      <div class="w-full max-w-5xl h-[min(90vh,calc(100dvh-32px))] bg-white dark:bg-navy rounded-2xl border border-navy/10 dark:border-white/10 shadow-2xl p-4 flex flex-col gap-3">
+        <div class="flex items-center justify-between text-navy dark:text-white font-bold">
           <span>Admin Mode</span>
-          <button class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors" @click="closeAdminPanel">Close</button>
+          <button class="px-3 py-1.5 rounded-lg border border-navy/10 dark:border-white/10 bg-white dark:bg-navy text-navy dark:text-white text-xs font-bold hover:bg-navy/10 dark:hover:bg-white/10 transition-colors" @click="closeAdminPanel">Close</button>
         </div>
         <div class="flex-1 min-h-0 grid grid-rows-2 gap-3">
           <label class="flex flex-col gap-1.5 min-h-0">
             <div class="flex items-center justify-between gap-2.5">
-              <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">System Prompt</span>
+              <span class="text-xs font-semibold text-navy/60 dark:text-white/60">System Prompt</span>
               <button
                 type="button"
-                class="px-2.5 py-1 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold hover:bg-secondary/10 transition-colors"
+                class="px-2.5 py-1 rounded-lg border border-navy/10 dark:border-white/10 bg-white dark:bg-navy text-navy dark:text-white text-[11px] font-bold hover:bg-navy/10 dark:hover:bg-white/10 transition-colors"
                 @click="resetAdminPrompt"
               >
                 Reset
@@ -210,14 +232,14 @@
             </div>
             <textarea
               v-model="adminPrompt"
-              class="w-full h-full min-h-0 resize-none border border-secondary/20 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl p-3 text-xs leading-relaxed font-mono"
+              class="w-full h-full min-h-0 resize-none border border-navy/10 bg-navy/5 dark:bg-white/5 text-navy dark:text-white rounded-xl p-3 text-xs leading-relaxed font-mono"
               spellcheck="false"
             ></textarea>
           </label>
           <label class="flex flex-col gap-1.5 min-h-0">
-            <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Console Logs</span>
+            <span class="text-xs font-semibold text-navy/60 dark:text-white/60">Console Logs</span>
             <textarea
-              class="w-full h-full min-h-0 resize-none border border-slate-700 bg-slate-900 text-slate-300 rounded-xl p-3 text-xs leading-relaxed font-mono"
+              class="w-full h-full min-h-0 resize-none border border-white/20 bg-navy text-white rounded-xl p-3 text-xs leading-relaxed font-mono"
               :value="adminLogText"
               readonly
               spellcheck="false"
@@ -230,23 +252,23 @@
     <!-- 통화 종료 확인 다이얼로그 -->
     <div
       v-if="showEndCallConfirm"
-      class="fixed inset-0 z-[80] grid place-items-center bg-slate-900/40 backdrop-blur-sm px-4"
+      class="fixed inset-0 z-[80] grid place-items-center bg-navy/40 backdrop-blur-sm px-4"
       role="dialog"
       aria-modal="true"
       aria-label="통화 종료 확인"
     >
-      <div class="w-full max-w-xs bg-white dark:bg-slate-900 rounded-2xl border border-secondary/20 shadow-2xl p-6">
-        <h3 class="text-slate-800 dark:text-white font-bold text-center">수업을 끝내시겠습니까?</h3>
-        <p class="text-slate-500 dark:text-slate-400 text-sm text-center mt-1.5">종료하면 세션 요약을 확인할 수 있어요.</p>
+      <div class="w-full max-w-xs bg-white dark:bg-navy rounded-2xl border border-navy/10 dark:border-white/10 shadow-2xl p-6">
+        <h3 class="text-navy dark:text-white font-bold text-center">수업을 끝내시겠습니까?</h3>
+        <p class="text-navy/60 dark:text-white/60 text-sm text-center mt-1.5">종료하면 세션 요약을 확인할 수 있어요.</p>
         <div class="flex gap-3 mt-5">
           <button
-            class="flex-1 py-2.5 rounded-xl border border-secondary/20 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-sm hover:bg-secondary/10 transition-colors"
+            class="flex-1 py-2.5 rounded-xl border border-navy/10 dark:border-white/10 bg-white dark:bg-navy text-navy dark:text-white font-semibold text-sm hover:bg-navy/10 dark:hover:bg-white/10 transition-colors"
             @click="showEndCallConfirm = false"
           >
             계속하기
           </button>
           <button
-            class="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-colors"
+            class="flex-1 py-2.5 rounded-xl bg-red text-white font-bold text-sm hover:bg-red/90 transition-colors"
             @click="confirmEndCall"
           >
             종료
@@ -304,6 +326,8 @@ const connectingStep = ref("");
 const errorInfo = ref({ type: "", title: "오류 발생", message: "다시 시도해 주세요.", actions: ["retry"] });
 const showEndCallConfirm = ref(false);
 const sessionStartTurnCount = ref(0);
+const isFirstLiveHint = ref(false);
+let hintTimer = null;
 
 // ---- 상태 라벨 매핑 ----
 const STATUS_LABELS = {
@@ -320,23 +344,23 @@ const statusLabel = computed(() => STATUS_LABELS[status.value] ?? status.value);
 const statusBadgeClass = computed(() => {
   switch (status.value) {
     case "ended":
-      return "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400";
+      return "bg-teal/10 border-teal/30 text-teal";
     case "error":
     case "closed":
-      return "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-500 dark:text-red-400";
+      return "bg-red/10 border-red/30 text-red";
     case "connecting":
-      return "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400";
+      return "bg-yellow/10 border-yellow/40 text-navy dark:text-white";
     default:
-      return "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400";
+      return "bg-navy/10 border-navy/20 text-navy/60 dark:bg-white/10 dark:border-white/20 dark:text-white/60";
   }
 });
 
 const statusDotClass = computed(() => {
   switch (status.value) {
-    case "ended": return "bg-emerald-500";
-    case "error": case "closed": return "bg-red-500";
-    case "connecting": return "bg-amber-400";
-    default: return "bg-slate-400";
+    case "ended": return "bg-teal";
+    case "error": case "closed": return "bg-red";
+    case "connecting": return "bg-yellow";
+    default: return "bg-navy/40 dark:bg-white/40";
   }
 });
 
@@ -346,34 +370,34 @@ const connectingStepText = computed(() => connectingStep.value || "연결 중...
 const statusDisplayText = computed(() => {
   if (isModelSpeaking.value) return "선생님이 말하고 있어요";
   if (isUserSpeaking.value) return "선생님이 듣고 있어요";
-  return "선생님이 듣고 있어요";
+  return "먼저 말을 걸어보세요";
 });
 
 const waveformBars = [
-  { height: "0.5rem", bgClass: "bg-primary/20", delay: "0.1s" },
-  { height: "0.75rem", bgClass: "bg-primary/30", delay: "0.2s" },
-  { height: "1rem", bgClass: "bg-primary/40", delay: "0.3s" },
-  { height: "1.5rem", bgClass: "bg-primary/50", delay: "0.4s" },
-  { height: "0.75rem", bgClass: "bg-primary/60", delay: "0.5s" },
-  { height: "1.25rem", bgClass: "bg-primary/70", delay: "0.6s" },
-  { height: "2rem", bgClass: "bg-primary", delay: "0.7s" },
-  { height: "1.5rem", bgClass: "bg-primary/80", delay: "0.8s" },
-  { height: "1.75rem", bgClass: "bg-primary/60", delay: "0.9s" },
-  { height: "1rem", bgClass: "bg-primary/40", delay: "1.0s" },
-  { height: "1.5rem", bgClass: "bg-primary/60", delay: "1.1s" },
-  { height: "2rem", bgClass: "bg-primary", delay: "0.2s" },
-  { height: "1.25rem", bgClass: "bg-primary/70", delay: "0.3s" },
-  { height: "1.75rem", bgClass: "bg-primary/50", delay: "0.4s" },
-  { height: "0.75rem", bgClass: "bg-primary/30", delay: "0.5s" },
-  { height: "1.25rem", bgClass: "bg-primary/40", delay: "0.6s" },
-  { height: "1.75rem", bgClass: "bg-primary/60", delay: "0.7s" },
-  { height: "2rem", bgClass: "bg-primary", delay: "0.8s" },
-  { height: "1.5rem", bgClass: "bg-primary/80", delay: "0.9s" },
-  { height: "1.25rem", bgClass: "bg-primary/70", delay: "1.0s" },
-  { height: "1.75rem", bgClass: "bg-primary/50", delay: "1.1s" },
-  { height: "1rem", bgClass: "bg-primary/40", delay: "0.1s" },
-  { height: "0.75rem", bgClass: "bg-primary/30", delay: "0.2s" },
-  { height: "0.5rem", bgClass: "bg-primary/20", delay: "0.3s" },
+  { height: "0.5rem", bgClass: "bg-blue/20", delay: "0.1s" },
+  { height: "0.75rem", bgClass: "bg-blue/30", delay: "0.2s" },
+  { height: "1rem", bgClass: "bg-blue/40", delay: "0.3s" },
+  { height: "1.5rem", bgClass: "bg-blue/50", delay: "0.4s" },
+  { height: "0.75rem", bgClass: "bg-blue/60", delay: "0.5s" },
+  { height: "1.25rem", bgClass: "bg-blue/70", delay: "0.6s" },
+  { height: "2rem", bgClass: "bg-blue", delay: "0.7s" },
+  { height: "1.5rem", bgClass: "bg-blue/80", delay: "0.8s" },
+  { height: "1.75rem", bgClass: "bg-blue/60", delay: "0.9s" },
+  { height: "1rem", bgClass: "bg-blue/40", delay: "1.0s" },
+  { height: "1.5rem", bgClass: "bg-blue/60", delay: "1.1s" },
+  { height: "2rem", bgClass: "bg-blue", delay: "0.2s" },
+  { height: "1.25rem", bgClass: "bg-blue/70", delay: "0.3s" },
+  { height: "1.75rem", bgClass: "bg-blue/50", delay: "0.4s" },
+  { height: "0.75rem", bgClass: "bg-blue/30", delay: "0.5s" },
+  { height: "1.25rem", bgClass: "bg-blue/40", delay: "0.6s" },
+  { height: "1.75rem", bgClass: "bg-blue/60", delay: "0.7s" },
+  { height: "2rem", bgClass: "bg-blue", delay: "0.8s" },
+  { height: "1.5rem", bgClass: "bg-blue/80", delay: "0.9s" },
+  { height: "1.25rem", bgClass: "bg-blue/70", delay: "1.0s" },
+  { height: "1.75rem", bgClass: "bg-blue/50", delay: "1.1s" },
+  { height: "1rem", bgClass: "bg-blue/40", delay: "0.1s" },
+  { height: "0.75rem", bgClass: "bg-blue/30", delay: "0.2s" },
+  { height: "0.5rem", bgClass: "bg-blue/20", delay: "0.3s" },
 ];
 
 const FIXED_MODEL_ID = "gemini-2.5-flash-native-audio-preview-12-2025";
@@ -452,6 +476,7 @@ const session = new GeminiLiveSession({
       if (status.value === "connecting" || status.value === "live") {
         errorInfo.value = { type: "session-error", title: "세션 오류", message: "세션 중 오류가 발생했습니다. 다시 시도해 주세요.", actions: ["retry"] };
         status.value = "error";
+        dismissFirstLiveHint();
       }
     }
     if (state === "closed") {
@@ -459,6 +484,7 @@ const session = new GeminiLiveSession({
         errorInfo.value = getDisconnectedError();
         status.value = "closed";
       }
+      dismissFirstLiveHint();
       isUserSpeaking.value = false;
       isModelSpeaking.value = false;
     }
@@ -472,6 +498,7 @@ const session = new GeminiLiveSession({
   },
   onUserSpeechStart: () => {
     isUserSpeaking.value = true;
+    dismissFirstLiveHint();
   },
   onUserSpeechEnd: () => {
     isUserSpeaking.value = false;
@@ -500,6 +527,17 @@ function stopTimer() {
   if (!timerId) return;
   clearInterval(timerId);
   timerId = null;
+}
+
+function clearHintTimer() {
+  if (!hintTimer) return;
+  window.clearTimeout(hintTimer);
+  hintTimer = null;
+}
+
+function dismissFirstLiveHint() {
+  isFirstLiveHint.value = false;
+  clearHintTimer();
 }
 
 async function withTimeout(promise, timeoutMs, label) {
@@ -652,6 +690,12 @@ async function startCall() {
     sessionStartTurnCount.value = conversationLog.value.length;
     status.value = "live";
     connectingStep.value = "";
+    isFirstLiveHint.value = true;
+    clearHintTimer();
+    hintTimer = window.setTimeout(() => {
+      isFirstLiveHint.value = false;
+      hintTimer = null;
+    }, 10000);
     console.log("[CallScreen] startCall:live");
     startTimer();
   } catch (err) {
@@ -661,6 +705,7 @@ async function startCall() {
       errorInfo.value = classifyError(err);
       status.value = "error";
       connectingStep.value = "";
+      dismissFirstLiveHint();
     }
   }
 }
@@ -670,6 +715,7 @@ function cancelConnecting() {
   session.stop();
   status.value = "idle";
   connectingStep.value = "";
+  dismissFirstLiveHint();
 }
 
 async function endCall() {
@@ -679,6 +725,7 @@ async function endCall() {
   status.value = "ended";
   isModelSpeaking.value = false;
   isUserSpeaking.value = false;
+  dismissFirstLiveHint();
   void (async () => {
     if (archiveReady.value) {
       try {
@@ -783,6 +830,7 @@ function practiceAgain() {
   stopTimer();
   seconds.value = 0;
   timer.value = formatTime(0);
+  dismissFirstLiveHint();
   sessionId.value =
     crypto.randomUUID?.() || `session-${Date.now().toString(36)}`;
   archiveReady.value = false;
@@ -803,6 +851,7 @@ function resetSession() {
   lessonMaterial.value = "";
   lessonGenerationError.value = "";
   isGeneratingLesson.value = false;
+  dismissFirstLiveHint();
   showInterestPopup.value = true;
   adminPrompt.value = DEFAULT_SYSTEM_INSTRUCTION;
   selectedTopic.value = "";
@@ -823,6 +872,7 @@ async function playLastTts() {
 onBeforeUnmount(() => {
   session.stop();
   stopTimer();
+  clearHintTimer();
   restoreConsoleLog?.();
 });
 
@@ -924,3 +974,16 @@ function formatLogArg(value) {
   }
 }
 </script>
+
+<style scoped>
+.hint-fade-enter-active,
+.hint-fade-leave-active {
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.hint-fade-enter-from,
+.hint-fade-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+</style>

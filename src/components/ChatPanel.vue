@@ -1,6 +1,6 @@
 <template>
   <section
-    class="absolute inset-0 z-40 bg-white/95 dark:bg-background-dark/95 backdrop-blur-lg p-4 sm:p-6 flex flex-col gap-4 transition-transform duration-300"
+    class="absolute inset-0 z-40 bg-white dark:bg-navy backdrop-blur-lg p-4 sm:p-6 flex flex-col gap-4 transition-transform duration-300"
     :class="open ? 'translate-y-0' : 'translate-y-full'"
     role="dialog"
     aria-modal="true"
@@ -8,9 +8,9 @@
     @keydown.escape="$emit('close')"
   >
     <div class="flex items-center justify-between">
-      <span class="text-slate-800 dark:text-white font-bold">대화 기록</span>
+      <span class="text-navy dark:text-white font-bold">대화 기록</span>
       <button
-        class="px-3 py-1.5 rounded-lg border border-secondary/20 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-secondary/10 transition-colors"
+        class="px-3 py-1.5 rounded-lg border border-navy/10 dark:border-white/10 bg-white dark:bg-navy text-navy dark:text-white text-xs font-bold hover:bg-navy/10 dark:hover:bg-white/10 transition-colors"
         @click="$emit('close')"
       >
         닫기
@@ -19,31 +19,31 @@
 
     <!-- 빈 상태 -->
     <div v-if="!renderItems.length" class="flex-1 flex flex-col items-center justify-center gap-3 text-center">
-      <span class="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600">chat_bubble_outline</span>
-      <p class="text-slate-400 dark:text-slate-500 text-sm">아직 대화 기록이 없어요.<br/>통화를 시작하면 여기에 표시됩니다.</p>
+      <span class="material-symbols-outlined text-4xl text-navy/20 dark:text-white/20">chat_bubble_outline</span>
+      <p class="text-navy/50 dark:text-white/50 text-sm">아직 대화 기록이 없어요.<br/>통화를 시작하면 여기에 표시됩니다.</p>
     </div>
 
     <div v-else class="flex-1 overflow-y-auto flex flex-col gap-2.5" style="overscroll-behavior: contain">
       <div v-for="item in renderItems" :key="item.key">
         <div
           v-if="item.type === 'divider'"
-          class="flex items-center gap-2.5 text-slate-400 dark:text-slate-500 text-[11px] font-bold tracking-wide"
+          class="flex items-center gap-2.5 text-navy/40 dark:text-white/40 text-[11px] font-bold tracking-wide"
         >
-          <span class="flex-1 h-px bg-secondary/30"></span>
+          <span class="flex-1 h-px bg-navy/10 dark:bg-white/10"></span>
           <span>{{ item.label }}</span>
-          <span class="flex-1 h-px bg-secondary/30"></span>
+          <span class="flex-1 h-px bg-navy/10 dark:bg-white/10"></span>
         </div>
         <div
           v-else
-          class="rounded-xl p-3 bg-white dark:bg-slate-800 border border-secondary/15 text-xs sm:text-sm leading-relaxed text-slate-700 dark:text-slate-300"
+          class="rounded-xl p-3 bg-white dark:bg-navy/60 border border-navy/10 dark:border-white/10 text-xs sm:text-sm leading-relaxed text-navy dark:text-white"
           :class="{
-            'border-l-[3px] border-l-blue-500': item.entry.speaker === 'user',
-            'border-l-[3px] border-l-primary': item.entry.speaker === 'model',
+            'border-l-[3px] border-l-blue': item.entry.speaker === 'user',
+            'border-l-[3px] border-l-teal': item.entry.speaker === 'model',
           }"
         >
           <div class="flex items-baseline justify-between gap-2 mb-1">
-            <strong class="text-slate-800 dark:text-slate-200">{{ speakerLabel(item.entry.speaker) }}</strong>
-            <time class="text-[11px] text-slate-400 dark:text-slate-500 whitespace-nowrap">{{ item.dateTime }}</time>
+            <strong class="text-navy dark:text-white">{{ speakerLabel(item.entry.speaker) }}</strong>
+            <time class="text-[11px] text-navy/40 dark:text-white/40 whitespace-nowrap">{{ item.dateTime }}</time>
           </div>
           <div lang="en">{{ item.entry.text }}</div>
         </div>

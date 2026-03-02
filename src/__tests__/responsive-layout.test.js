@@ -195,10 +195,10 @@ describe("CallScreen responsive layout classes", () => {
   it("settings sheet has responsive padding p-4 sm:p-5", () => {
     const wrapper = mount(CallScreen);
 
-    // Settings section contains "Session Settings" text
+    // 설정 섹션에는 "세션 설정" 텍스트가 포함된다.
     const settingsSection = wrapper
       .findAll("section")
-      .find((s) => s.text().includes("Session Settings"));
+      .find((s) => s.text().includes("세션 설정"));
 
     expect(settingsSection).toBeDefined();
     const classes = settingsSection.element.className;

@@ -13,7 +13,7 @@
 
 @layer components {
   .glass-effect {
-    background: rgba(181, 214, 214, 0.1);
+    background: rgba(63, 136, 197, 0.1);
     backdrop-filter: blur(8px);
   }
 }
