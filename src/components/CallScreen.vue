@@ -1,49 +1,30 @@
 <template>
-  <div class="relative flex h-dvh w-full max-w-md mx-auto flex-col overflow-hidden font-display">
-    <!-- Header -->
-    <header class="flex items-center p-3 sm:p-6 pt-[max(0.75rem,env(safe-area-inset-top))] justify-between shrink-0">
-      <div class="flex items-baseline gap-1.5 px-3 py-1.5 rounded-full bg-navy/10 border border-navy/20 dark:bg-white/10 dark:border-white/20">
-        <span class="text-sm font-bold text-navy dark:text-white">{{ timer }}</span>
+  <div class="relative flex h-dvh min-h-dvh w-full flex-col overflow-hidden bg-background text-on-background font-body">
+    <header class="sticky top-0 z-50 flex h-16 w-full shrink-0 items-center justify-between border-b border-grey-100 bg-surface/80 px-h-padding pt-[env(safe-area-inset-top)] backdrop-blur-md">
+      <div class="flex w-1/3 items-center justify-start">
+        <span class="font-subtitle text-subtitle text-secondary">{{ timer }}</span>
       </div>
-      <h2 class="text-navy dark:text-white text-sm font-semibold tracking-widest uppercase">Talky Live</h2>
-      <div
-        v-if="status === 'live'"
-        class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal/10 border border-teal/20"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        <span class="relative flex h-2 w-2" aria-hidden="true">
-          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal opacity-75"></span>
-          <span class="relative inline-flex rounded-full h-2 w-2 bg-teal"></span>
-        </span>
-        <span class="text-[10px] font-bold text-teal tracking-wider">LIVE</span>
+      <div class="flex w-1/3 justify-center">
+        <h1 class="font-display-large text-display-large text-primary tracking-tight">Talky</h1>
       </div>
-      <div
-        v-else
-        class="flex items-center gap-1.5 px-3 py-1 rounded-full border"
-        :class="statusBadgeClass"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        <span class="relative flex h-2 w-2" aria-hidden="true">
-          <span class="relative inline-flex rounded-full h-2 w-2" :class="statusDotClass"></span>
-        </span>
-        <span class="text-[10px] font-bold tracking-wider uppercase">{{ statusLabel }}</span>
+      <div class="flex w-1/3 items-center justify-end gap-xs" aria-live="polite" aria-atomic="true">
+        <span class="h-2 w-2 rounded-full" :class="statusDotClass"></span>
+        <span class="font-subtitle text-subtitle text-on-surface">{{ statusLabel }}</span>
       </div>
     </header>
 
     <!-- Connecting Overlay -->
-    <div v-if="status === 'connecting'" class="absolute inset-0 z-20 grid place-items-center bg-white/40 dark:bg-navy/40">
-      <div class="min-w-[220px] p-5 rounded-2xl grid justify-items-center gap-2 bg-white dark:bg-navy border border-navy/10 dark:border-white/10 shadow-xl" role="status">
-        <span class="text-navy dark:text-white text-lg font-bold tracking-tight">{{ connectingStepText }}</span>
-        <span class="text-navy/60 dark:text-white/60 text-xs font-semibold">잠시만 기다려 주세요</span>
+    <div v-if="status === 'connecting'" class="absolute inset-0 z-30 grid place-items-center bg-scrim px-h-padding backdrop-blur-sm">
+      <div class="grid min-w-[220px] justify-items-center gap-sm rounded-xl border border-grey-200 bg-background-layered p-lg shadow-xl" role="status">
+        <span class="font-heading text-heading text-on-surface">{{ connectingStepText }}</span>
+        <span class="font-caption text-caption text-secondary">잠시만 기다려 주세요</span>
         <span class="inline-flex items-center gap-1.5 mt-1" aria-hidden="true">
-          <i class="w-2 h-2 rounded-full bg-yellow" style="animation: connecting-bounce 1s ease-in-out infinite"></i>
-          <i class="w-2 h-2 rounded-full bg-yellow" style="animation: connecting-bounce 1s ease-in-out infinite 0.14s"></i>
-          <i class="w-2 h-2 rounded-full bg-yellow" style="animation: connecting-bounce 1s ease-in-out infinite 0.28s"></i>
+          <i class="h-2 w-2 rounded-full bg-warning" style="animation: connecting-bounce 1s ease-in-out infinite"></i>
+          <i class="h-2 w-2 rounded-full bg-warning" style="animation: connecting-bounce 1s ease-in-out infinite 0.14s"></i>
+          <i class="h-2 w-2 rounded-full bg-warning" style="animation: connecting-bounce 1s ease-in-out infinite 0.28s"></i>
         </span>
         <button
-          class="mt-3 px-5 py-2 rounded-lg bg-navy/10 dark:bg-white/10 text-navy dark:text-white text-xs font-bold hover:bg-navy/20 dark:hover:bg-white/20 transition-colors"
+          class="mt-sm rounded-lg bg-grey-100 px-md py-sm font-body-sm text-body-sm text-on-surface transition-colors hover:bg-grey-200"
           @click="cancelConnecting"
         >
           취소
@@ -51,35 +32,38 @@
       </div>
     </div>
 
-    <!-- Main Content -->
-    <main class="flex-1 flex flex-col items-center px-4 sm:px-6 justify-between py-4 min-h-0">
+    <InterestPopup
+      v-if="showInterestPopup && status === 'idle'"
+      :is-loading="isGeneratingLesson"
+      :error-message="lessonGenerationError"
+      :loading-step="lessonGenerationStep"
+      @start="handleInterestStart"
+    />
 
-      <!-- Session Summary (ended 상태) -->
+    <main v-else class="flex-1 overflow-y-auto px-h-padding py-lg pb-[112px]" style="overscroll-behavior: contain">
       <template v-if="status === 'ended'">
-        <div class="flex-1 w-full overflow-y-auto" style="overscroll-behavior: contain">
-          <SessionSummary
-            :duration-seconds="seconds"
-            :turn-count="conversationLog.length - sessionStartTurnCount"
-            :lesson-topic="selectedTopic"
-            @viewChat="openChat"
-            @practiceAgain="practiceAgain"
-            @newTopic="resetSession"
-          />
-        </div>
+        <SessionSummary
+          :duration-seconds="seconds"
+          :turn-count="conversationLog.length - sessionStartTurnCount"
+          :lesson-topic="selectedTopic"
+          @viewChat="openChat"
+          @practiceAgain="practiceAgain"
+          @newTopic="resetSession"
+        />
       </template>
 
       <!-- 에러 상태 -->
       <template v-else-if="status === 'error' || status === 'closed'">
-        <div class="flex-1 w-full flex flex-col items-center justify-center gap-5 px-2">
-          <div class="w-16 h-16 rounded-full bg-red/10 flex items-center justify-center">
-            <span class="material-symbols-outlined text-4xl text-red">error</span>
+        <div class="mx-auto flex min-h-[calc(100dvh-176px)] w-full max-w-md flex-col items-center justify-center gap-lg">
+          <div class="flex h-16 w-16 items-center justify-center rounded-full bg-error-container">
+            <span class="material-symbols-outlined text-4xl text-error">error</span>
           </div>
           <div class="text-center">
-            <h3 class="text-navy dark:text-white font-bold text-lg">{{ errorInfo.title }}</h3>
-            <p class="text-navy/60 dark:text-white/60 text-sm mt-1 leading-relaxed">{{ errorInfo.message }}</p>
+            <h2 class="font-heading-lg text-heading-lg text-on-surface">{{ errorInfo.title }}</h2>
+            <p class="mt-xs font-body text-body text-secondary">{{ errorInfo.message }}</p>
           </div>
           <button
-            class="px-8 py-3 rounded-xl bg-blue text-white font-bold text-sm hover:shadow-lg hover:shadow-blue/25 active:scale-[0.98] transition-all"
+            class="rounded-xl bg-primary px-xl py-md font-subtitle text-subtitle text-on-primary transition-colors hover:bg-blue-hover active:scale-[0.98]"
             @click="startCall"
           >
             다시 시도
@@ -87,57 +71,62 @@
         </div>
       </template>
 
-      <!-- 일반 상태 (idle / live / connecting) -->
       <template v-else>
-        <!-- Waveform Bars (live 또는 connecting 시) -->
-        <div
-          v-if="status === 'live' || status === 'connecting'"
-          class="w-full flex items-center justify-center gap-1 h-12 sm:h-16 mt-2"
-          aria-hidden="true"
-        >
-          <div
-            v-for="(bar, i) in waveformBars"
-            :key="i"
-            class="waveform-bar w-1.5 rounded-full transition-opacity duration-300"
-            :class="[bar.bgClass, isModelSpeaking ? 'opacity-100' : 'opacity-30']"
-            :style="{
-              height: bar.height,
-              animationDelay: bar.delay,
-              animationPlayState: isModelSpeaking ? 'running' : 'paused'
-            }"
-          ></div>
-        </div>
-        <div v-else class="h-12 sm:h-16 mt-2"></div>
+        <section class="mx-auto flex min-h-[calc(100dvh-192px)] w-full max-w-2xl flex-col justify-center gap-lg">
+          <article
+            v-if="showLessonMaterial"
+            class="relative overflow-hidden rounded-xl border border-grey-200 bg-background-layered p-lg shadow-sm"
+          >
+            <div v-if="status === 'live'" class="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-blue-light to-primary-container"></div>
+            <div class="relative z-10">
+              <div class="mb-md flex items-center gap-sm">
+                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-light text-primary">
+                  <span class="material-symbols-outlined">book</span>
+                </div>
+                <div class="min-w-0">
+                  <h2 class="font-subtitle text-subtitle text-grey-900">{{ status === 'live' ? 'Lesson Material' : "Today's Scenario" }}</h2>
+                  <p class="truncate font-caption text-caption text-secondary">{{ selectedTopic || 'English conversation practice' }}</p>
+                </div>
+              </div>
 
-        <!-- Lesson Material Card -->
-        <div
-          v-if="showLessonMaterial"
-          class="w-full max-w-sm mx-auto rounded-3xl bg-navy/5 border border-navy/10 dark:bg-white/5 dark:border-white/10 h-[50dvh] overflow-hidden flex flex-col px-5 sm:px-8 py-8 sm:py-16"
-        >
-          <h3 class="text-[10px] font-bold text-navy/40 dark:text-white/40 uppercase tracking-[0.2em] mb-3 text-center shrink-0">Lesson Material</h3>
+              <div class="max-h-[48dvh] overflow-y-auto rounded-lg border border-grey-100 bg-grey-50 p-md" style="overscroll-behavior: contain">
+                <p class="whitespace-pre-line font-body-lg text-body-lg leading-relaxed text-on-surface" lang="en">{{ materialDisplayText }}</p>
+              </div>
 
-          <!-- idle 상태에서 행동 유도 안내 문구 -->
-          <p v-if="status === 'idle'" class="text-[11px] text-navy/40 dark:text-white/40 text-center mb-4 shrink-0">
-            자료를 미리 읽어보세요. 준비되면 통화 버튼을 눌러 수업을 시작합니다.
-          </p>
+              <div class="mt-md flex flex-wrap items-center justify-between gap-sm">
+                <button class="flex items-center gap-xs font-body-sm text-body-sm text-primary transition-colors hover:text-blue-hover" @click="playLastTts">
+                  <span class="material-symbols-outlined text-[18px]">volume_up</span>
+                  Listen
+                </button>
+                <div class="flex flex-wrap gap-xs">
+                  <span class="rounded bg-grey-100 px-2 py-1 text-xs font-medium text-grey-600">Beginner</span>
+                  <span class="rounded bg-grey-100 px-2 py-1 text-xs font-medium text-grey-600">Daily Life</span>
+                </div>
+              </div>
+            </div>
+          </article>
 
-          <div class="flex-1 min-h-0 overflow-y-auto pr-1" style="overscroll-behavior: contain">
-            <p class="text-navy dark:text-white text-sm leading-relaxed text-left font-medium whitespace-pre-line" lang="en">
-              {{ materialDisplayText }}
-            </p>
+          <div v-else class="rounded-xl border border-grey-200 bg-background-layered p-lg text-center">
+            <p class="font-body text-body text-secondary">강의 자료를 준비하려면 새 주제를 선택해 주세요.</p>
           </div>
-        </div>
-        <div v-else class="flex-1"></div>
 
-        <!-- Status Text (live 상태에서만) -->
-        <div class="w-full max-w-xs mx-auto mb-4" aria-live="polite" aria-atomic="true">
-          <p v-if="status === 'live'" class="text-navy/60 dark:text-white/60 text-sm italic font-light leading-relaxed text-center tracking-wide">
-            {{ statusDisplayText }}
-          </p>
+          <div v-if="status === 'live'" class="flex flex-col items-center gap-sm" aria-live="polite" aria-atomic="true">
+            <div class="flex items-center gap-sm text-primary">
+              <span class="material-symbols-outlined pulse-subtle" style="font-variation-settings: 'FILL' 1">mic</span>
+              <span class="font-subtitle text-subtitle">{{ statusDisplayText }}</span>
+            </div>
+            <div class="flex h-3 items-end gap-1" aria-hidden="true">
+              <div class="pulse-subtle h-2 w-1 rounded-full bg-primary"></div>
+              <div class="pulse-subtle h-3 w-1 rounded-full bg-primary" style="animation-delay: 150ms"></div>
+              <div class="pulse-subtle h-1.5 w-1 rounded-full bg-primary" style="animation-delay: 300ms"></div>
+              <div class="pulse-subtle h-2.5 w-1 rounded-full bg-primary" style="animation-delay: 450ms"></div>
+            </div>
+          </div>
+
           <transition name="hint-fade">
             <div
               v-if="status === 'live' && isFirstLiveHint"
-              class="w-full mt-2 px-4 py-3 rounded-2xl bg-yellow/10 border border-yellow/30 text-center cursor-pointer"
+              class="mx-auto w-full max-w-sm cursor-pointer rounded-xl border border-primary-fixed-dim bg-blue-light px-md py-sm text-center"
               role="status"
               aria-live="polite"
               tabindex="0"
@@ -145,32 +134,23 @@
               @keydown.enter.prevent="dismissFirstLiveHint"
               @keydown.space.prevent="dismissFirstLiveHint"
             >
-              <p class="text-navy dark:text-white text-xs font-semibold leading-relaxed">
-                👋 가볍게 인사해 보세요!
-              </p>
-              <p class="text-navy/60 dark:text-white/50 text-[11px] mt-0.5">
+              <p class="font-body-sm text-body-sm font-semibold text-on-surface">가볍게 인사해 보세요.</p>
+              <p class="mt-xs font-caption text-caption text-secondary">
                 예: "Hi Jesica! I'm [이름]."
-              </p>
-              <p class="text-navy/40 dark:text-white/30 text-[10px] mt-1">
-                선생님이 대화를 이끌어 드릴게요.
               </p>
             </div>
           </transition>
-        </div>
+        </section>
       </template>
     </main>
 
-    <!-- Control Bar -->
     <ControlBar
+      v-if="!(showInterestPopup && status === 'idle')"
       :call-active="isCallActive"
       @toggleCall="toggleCall"
       @toggleChat="toggleChat"
       @toggleMenu="toggleMenu"
     />
-
-    <!-- Deco blur circles -->
-    <div class="absolute -top-24 -right-24 w-64 h-64 bg-blue/10 rounded-full blur-3xl pointer-events-none"></div>
-    <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-teal/10 rounded-full blur-3xl pointer-events-none"></div>
 
     <!-- Chat Panel -->
     <ChatPanel
@@ -181,28 +161,28 @@
 
     <!-- Settings Sheet -->
     <section
-      class="absolute left-0 right-0 bottom-0 z-30 bg-white/95 dark:bg-navy/95 rounded-t-3xl border-t border-navy/10 dark:border-white/10 shadow-xl p-4 sm:p-5 transition-transform duration-300"
-      :class="isSettingsOpen ? 'translate-y-0' : 'translate-y-[105%]'"
+      class="fixed inset-x-0 bottom-0 z-[70] flex min-h-[55dvh] max-h-[70dvh] flex-col overflow-y-auto rounded-t-xl border-t border-grey-200 bg-background-layered p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl transition-transform duration-300 sm:p-5"
+      :class="isSettingsOpen ? 'translate-y-0' : 'translate-y-[calc(100%+16px)]'"
       role="dialog"
       aria-modal="true"
       aria-label="설정"
     >
-      <div class="flex items-center justify-between text-navy dark:text-white font-bold">
+      <div class="flex items-center justify-between text-on-surface font-bold">
         <span>세션 설정</span>
-        <button class="px-3 py-1.5 rounded-lg border border-navy/10 dark:border-white/10 bg-white dark:bg-navy text-navy dark:text-white text-xs font-bold hover:bg-navy/10 dark:hover:bg-white/10 transition-colors" @click="toggleMenu">닫기</button>
+        <button class="rounded-lg border border-grey-200 bg-background-layered px-3 py-1.5 text-xs font-bold text-on-surface transition-colors hover:bg-grey-100" @click="toggleMenu">닫기</button>
       </div>
       <div class="flex flex-wrap gap-2.5 mt-3">
-        <button class="px-3 py-1.5 rounded-lg border border-navy/10 dark:border-white/10 bg-white dark:bg-navy text-navy dark:text-white text-xs font-bold hover:bg-navy/10 dark:hover:bg-white/10 transition-colors" @click="resetSession">새 세션 시작</button>
-        <button class="px-3 py-1.5 rounded-lg border border-navy/10 dark:border-white/10 bg-white dark:bg-navy text-navy dark:text-white text-xs font-bold hover:bg-navy/10 dark:hover:bg-white/10 transition-colors" @click="playLastTts">마지막 TTS 재생</button>
+        <button class="rounded-lg border border-grey-200 bg-background-layered px-3 py-1.5 text-xs font-bold text-on-surface transition-colors hover:bg-grey-100" @click="resetSession">새 세션 시작</button>
+        <button class="rounded-lg border border-grey-200 bg-background-layered px-3 py-1.5 text-xs font-bold text-on-surface transition-colors hover:bg-grey-100" @click="playLastTts">마지막 TTS 재생</button>
         <button
           v-if="isDebugModeEnabled"
-          class="px-3 py-1.5 rounded-lg border border-navy/10 dark:border-white/10 bg-white dark:bg-navy text-navy dark:text-white text-xs font-bold hover:bg-navy/10 dark:hover:bg-white/10 transition-colors"
+          class="rounded-lg border border-grey-200 bg-background-layered px-3 py-1.5 text-xs font-bold text-on-surface transition-colors hover:bg-grey-100"
           @click="openAdminPanel"
         >
           Admin Mode
         </button>
       </div>
-      <div class="mt-4 bg-blue/5 border border-blue/10 rounded-xl text-navy/60 dark:text-white/60 text-xs leading-relaxed p-3">
+      <div class="mt-4 bg-blue-light border border-grey-200 rounded-xl text-secondary text-xs leading-relaxed p-3">
         {{ analysis || "통화를 종료하면 분석을 요청합니다." }}
       </div>
     </section>
@@ -277,13 +257,6 @@
       </div>
     </div>
 
-    <InterestPopup
-      v-if="showInterestPopup && status === 'idle'"
-      :is-loading="isGeneratingLesson"
-      :error-message="lessonGenerationError"
-      :loading-step="lessonGenerationStep"
-      @start="handleInterestStart"
-    />
   </div>
 </template>
 
@@ -331,12 +304,12 @@ let hintTimer = null;
 
 // ---- 상태 라벨 매핑 ----
 const STATUS_LABELS = {
-  idle: "대기",
-  connecting: "연결 중",
-  live: "LIVE",
-  ended: "수업 완료",
-  error: "오류",
-  closed: "연결 끊김",
+  idle: "Idle",
+  connecting: "Connecting",
+  live: "Live",
+  ended: "Idle",
+  error: "Error",
+  closed: "Closed",
 };
 
 const statusLabel = computed(() => STATUS_LABELS[status.value] ?? status.value);
@@ -357,10 +330,16 @@ const statusBadgeClass = computed(() => {
 
 const statusDotClass = computed(() => {
   switch (status.value) {
-    case "ended": return "bg-teal";
-    case "error": case "closed": return "bg-red";
-    case "connecting": return "bg-yellow";
-    default: return "bg-navy/40 dark:bg-white/40";
+    case "live":
+    case "ended":
+      return "bg-success";
+    case "error":
+    case "closed":
+      return "bg-error";
+    case "connecting":
+      return "bg-warning";
+    default:
+      return "bg-grey-400";
   }
 });
 
@@ -368,8 +347,8 @@ const statusDotClass = computed(() => {
 const connectingStepText = computed(() => connectingStep.value || "연결 중...");
 
 const statusDisplayText = computed(() => {
-  if (isModelSpeaking.value) return "선생님이 말하고 있어요";
-  if (isUserSpeaking.value) return "선생님이 듣고 있어요";
+  if (isModelSpeaking.value) return "선생님이 말하는 중..";
+  if (isUserSpeaking.value) return "선생님이 듣는 중..";
   return "먼저 말을 걸어보세요";
 });
 

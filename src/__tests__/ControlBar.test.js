@@ -18,11 +18,11 @@ describe("ControlBar", () => {
     expect(screen.getByLabelText("Settings")).toBeInTheDocument();
   });
 
-  it("shows 'call' icon text when callActive is false", () => {
+  it("shows 'mic' icon text when callActive is false", () => {
     render(ControlBar, { props: { callActive: false } });
 
     const callButton = screen.getByLabelText("Start call");
-    expect(callButton.textContent.trim()).toBe("call");
+    expect(callButton.textContent.trim()).toBe("mic");
   });
 
   it("shows 'call_end' icon text when callActive is true", () => {
@@ -59,17 +59,17 @@ describe("ControlBar", () => {
     expect(emitted().toggleMenu).toHaveLength(1);
   });
 
-  it("applies emerald background when callActive is false", () => {
+  it("applies primary background when callActive is false", () => {
     render(ControlBar, { props: { callActive: false } });
 
     const callButton = screen.getByLabelText("Start call");
-    expect(callButton.className).toContain("bg-emerald-500");
+    expect(callButton.className).toContain("bg-primary");
   });
 
-  it("applies accent-1 background when callActive is true", () => {
+  it("applies error background when callActive is true", () => {
     render(ControlBar, { props: { callActive: true } });
 
     const callButton = screen.getByLabelText("End call");
-    expect(callButton.className).toContain("bg-accent-1");
+    expect(callButton.className).toContain("bg-error");
   });
 });

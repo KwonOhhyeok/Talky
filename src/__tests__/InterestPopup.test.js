@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/vue";
 import InterestPopup from "../components/InterestPopup.vue";
 
-const PLACEHOLDER =
-  "주제를 직접 입력하세요 (예: 영화 추천, 요리 레시피)";
+const PLACEHOLDER = "메시지를 입력하세요...";
 const CHIP_TOPIC = "AI가 번역가 일자리를 대체할까?";
 
 function renderPopup(props = {}) {
@@ -35,15 +34,16 @@ describe("InterestPopup", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("emits selected chip topic and clears input when chip is selected", async () => {
+  it("applies selected chip topic to the input and starts with that topic", async () => {
     const { onStart } = renderPopup();
     const input = screen.getByPlaceholderText(PLACEHOLDER);
-    const chipButton = screen.getByRole("button", { name: CHIP_TOPIC });
+    const chipButton = screen.getByRole("option", { name: CHIP_TOPIC });
 
     await fireEvent.update(input, "임시 입력");
     await fireEvent.click(chipButton);
 
-    expect(input).toHaveValue("");
+    expect(input).toHaveValue(CHIP_TOPIC);
+    expect(document.activeElement).toBe(input);
     expect(chipButton).toHaveAttribute("aria-selected", "true");
 
     await fireEvent.click(screen.getByRole("button", { name: "시작하기" }));
@@ -51,16 +51,16 @@ describe("InterestPopup", () => {
     expect(localStorage.getItem("talky:last_interest")).toBe(CHIP_TOPIC);
   });
 
-  it("clears chip focus when input gains focus and disables start when input is empty", async () => {
+  it("clears chip selection when input is edited to empty", async () => {
     renderPopup();
     const input = screen.getByPlaceholderText(PLACEHOLDER);
-    const chipButton = screen.getByRole("button", { name: CHIP_TOPIC });
+    const chipButton = screen.getByRole("option", { name: CHIP_TOPIC });
     const startButton = screen.getByRole("button", { name: "시작하기" });
 
     await fireEvent.click(chipButton);
     expect(chipButton).toHaveAttribute("aria-selected", "true");
 
-    await fireEvent.focus(input);
+    await fireEvent.update(input, "");
     expect(chipButton).toHaveAttribute("aria-selected", "false");
     expect(startButton).toBeDisabled();
   });
@@ -98,7 +98,7 @@ describe("InterestPopup", () => {
     await fireEvent.update(input, "주제 있음");
 
     const loadingText = screen.getByText("주제 분석 중...");
-    const startButton = loadingText.closest("button");
+    const startButton = screen.getByRole("button", { name: "시작하기" });
 
     expect(startButton).not.toBeNull();
     expect(startButton).toBeDisabled();

@@ -40,10 +40,11 @@ describe("Tailwind CSS build integration", () => {
 
   it("CSS output contains custom color definitions from tailwind.config", () => {
     // Tailwind lowercases hex values in the compiled output
-    expect(cssContent.toLowerCase()).toContain("9cf6f6"); // primary
+    expect(cssContent.toLowerCase()).toContain("0059b9"); // primary
   });
 
-  it("CSS output contains the Lexend font-family declaration", () => {
-    expect(cssContent).toContain("Lexend");
+  it("CSS output contains the sample font-family declarations", () => {
+    expect(cssContent).toContain("Inter");
+    expect(cssContent).toContain("Work Sans");
   });
 });

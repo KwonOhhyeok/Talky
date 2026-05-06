@@ -1,36 +1,36 @@
 <template>
-  <footer class="bg-white dark:bg-navy/80 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-6 sm:pb-10 shrink-0">
-    <div class="flex items-center justify-around max-w-sm mx-auto">
+  <nav class="fixed bottom-0 left-0 z-50 flex h-[100px] w-full items-start justify-around bg-surface/80 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md">
+    <div class="mx-auto flex w-full max-w-md items-start justify-around">
       <button
-        class="flex size-12 sm:size-14 items-center justify-center rounded-full border border-navy/10 dark:border-white/10 bg-white dark:bg-navy/60 text-navy dark:text-white hover:bg-navy/10 dark:hover:bg-white/10 transition-all"
+        class="mt-[12px] flex h-14 w-14 items-center justify-center rounded-full text-on-surface-variant transition-all hover:bg-surface-container-high active:scale-95"
         @click="$emit('toggleChat')"
         aria-label="Toggle chat"
       >
         <span class="material-symbols-outlined">history</span>
       </button>
 
-      <button
-        class="flex size-16 sm:size-20 items-center justify-center rounded-full text-white shadow-xl hover:scale-105 active:scale-95 transition-all"
-        :class="callActive
-          ? 'bg-red shadow-red/20'
-          : 'bg-teal shadow-teal/20'"
-        @click="$emit('toggleCall')"
-        :aria-label="callActive ? 'End call' : 'Start call'"
-      >
-        <span class="material-symbols-outlined text-2xl sm:text-3xl">
-          {{ callActive ? 'call_end' : 'call' }}
-        </span>
-      </button>
+      <div class="mt-[4px] flex h-[72px] w-[72px] items-center justify-center">
+        <button
+          class="flex h-16 w-16 items-center justify-center rounded-full text-on-primary shadow-lg transition-all active:scale-90"
+          :class="callActive ? 'bg-error' : 'bg-primary'"
+          @click="$emit('toggleCall')"
+          :aria-label="callActive ? 'End call' : 'Start call'"
+        >
+          <span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1">
+            {{ callActive ? 'call_end' : 'mic' }}
+          </span>
+        </button>
+      </div>
 
       <button
-        class="flex size-12 sm:size-14 items-center justify-center rounded-full border border-navy/10 dark:border-white/10 bg-white dark:bg-navy/60 text-navy dark:text-white hover:bg-navy/10 dark:hover:bg-white/10 transition-all"
+        class="mt-[12px] flex h-14 w-14 items-center justify-center rounded-full text-on-surface-variant transition-all hover:bg-surface-container-high active:scale-95"
         @click="$emit('toggleMenu')"
         aria-label="Settings"
       >
         <span class="material-symbols-outlined">settings</span>
       </button>
     </div>
-  </footer>
+  </nav>
 </template>
 
 <script setup>

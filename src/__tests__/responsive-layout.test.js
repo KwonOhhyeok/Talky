@@ -123,12 +123,12 @@ describe("CallScreen responsive layout classes", () => {
     expect(root.className).not.toContain("h-screen");
   });
 
-  it("header has responsive padding: p-3 and sm:p-6", () => {
+  it("header follows the sample top app bar sizing", () => {
     const wrapper = mount(CallScreen);
     const header = wrapper.find("header");
 
-    expect(header.classes()).toContain("p-3");
-    expect(header.classes()).toContain("sm:p-6");
+    expect(header.classes()).toContain("h-16");
+    expect(header.classes()).toContain("px-h-padding");
   });
 
   it("header uses safe-area-inset-top via pt style", () => {
@@ -139,57 +139,45 @@ describe("CallScreen responsive layout classes", () => {
     expect(header.element.className).toContain("safe-area-inset-top");
   });
 
-  it("main content area has responsive horizontal padding: px-4 and sm:px-6", () => {
-    const wrapper = mount(CallScreen);
+  it("main content area uses sample horizontal padding after topic selection", async () => {
+    const wrapper = mountCallScreenWithState({
+      showInterestPopup: false,
+      lessonMaterial: "Lesson material",
+    });
+    await wrapper.vm.$nextTick();
     const main = wrapper.find("main");
 
-    expect(main.classes()).toContain("px-4");
-    expect(main.classes()).toContain("sm:px-6");
+    expect(main.classes()).toContain("px-h-padding");
+    expect(main.classes()).toContain("pb-[112px]");
   });
 
-  describe("waveform height is responsive when status is live", () => {
-    it("waveform container has h-12 and sm:h-16 classes", async () => {
-      const wrapper = mountCallScreenWithState({ status: "live" });
+  describe("live status indicator", () => {
+    it("renders the sample speaking status when status is live", async () => {
+      const wrapper = mountCallScreenWithState({
+        status: "live",
+        lessonMaterial: "Lesson material",
+      });
       await wrapper.vm.$nextTick();
 
-      // The waveform container is the div that holds .waveform-bar elements
-      const waveformContainer = wrapper.find(".waveform-bar").element
-        .parentElement;
-
-      expect(waveformContainer.className).toContain("h-12");
-      expect(waveformContainer.className).toContain("sm:h-16");
+      expect(wrapper.text()).toContain("먼저 말을 걸어보세요");
+      expect(wrapper.find(".pulse-subtle").exists()).toBe(true);
     });
   });
 
-  it("waveform placeholder (non-live) also has responsive height h-12 sm:h-16", () => {
-    // In idle state, there's a placeholder div with the same height classes
-    const wrapper = mount(CallScreen);
-    const main = wrapper.find("main");
-
-    // The placeholder is the first child div of main with h-12
-    const placeholder = main.element.querySelector(".h-12");
-    expect(placeholder).not.toBeNull();
-    expect(placeholder.className).toContain("sm:h-16");
-  });
-
-  it("lesson material card has responsive padding: px-5 sm:px-8 py-8 sm:py-16", async () => {
+  it("lesson material card uses sample rounded card treatment", async () => {
     const wrapper = mountCallScreenWithState({
       status: "live",
       lessonMaterial: "Title\nSummary",
     });
     await wrapper.vm.$nextTick();
 
-    // Find the lesson material card — it's the div containing the h3 with "Lesson Material"
-    const heading = wrapper.findAll("h3").find((h) => h.text() === "Lesson Material");
+    const heading = wrapper.findAll("h2").find((h) => h.text() === "Lesson Material");
     expect(heading).toBeDefined();
 
-    // The card is the parent div of the heading
-    const lessonCard = heading.element.parentElement;
-    const classes = lessonCard.className;
-    expect(classes).toContain("px-5");
-    expect(classes).toContain("sm:px-8");
-    expect(classes).toContain("py-8");
-    expect(classes).toContain("sm:py-16");
+    const lessonCard = wrapper.find("article");
+    expect(lessonCard.classes()).toContain("rounded-xl");
+    expect(lessonCard.classes()).toContain("border");
+    expect(lessonCard.classes()).toContain("p-lg");
   });
 
   it("settings sheet has responsive padding p-4 sm:p-5", () => {
@@ -204,6 +192,8 @@ describe("CallScreen responsive layout classes", () => {
     const classes = settingsSection.element.className;
     expect(classes).toContain("p-4");
     expect(classes).toContain("sm:p-5");
+    expect(classes).toContain("min-h-[55dvh]");
+    expect(classes).toContain("z-[70]");
   });
 });
 
@@ -211,55 +201,51 @@ describe("CallScreen responsive layout classes", () => {
 // 4. ControlBar.vue — responsive button sizes and safe-area-inset-bottom
 // ===========================================================================
 describe("ControlBar responsive layout classes", () => {
-  it("footer has responsive padding with safe-area-inset-bottom", () => {
+  it("nav has fixed bottom layout with safe-area-inset-bottom", () => {
     const wrapper = mount(ControlBar, {
       props: { callActive: false },
     });
-    const footer = wrapper.find("footer");
-    const classes = footer.element.className;
+    const nav = wrapper.find("nav");
+    const classes = nav.element.className;
 
-    // Base padding
-    expect(classes).toContain("p-4");
-    // Safe area inset bottom via pb-[max(...)]
     expect(classes).toContain("safe-area-inset-bottom");
-    // sm: breakpoint padding
-    expect(classes).toContain("sm:p-6");
+    expect(classes).toContain("fixed");
+    expect(classes).toContain("h-[100px]");
   });
 
-  it("call button has responsive size: size-16 and sm:size-20", () => {
+  it("call button has sample primary action size", () => {
     const wrapper = mount(ControlBar, {
       props: { callActive: false },
     });
     const callButton = wrapper.find("[aria-label='Start call']");
     const classes = callButton.element.className;
 
-    expect(classes).toContain("size-16");
-    expect(classes).toContain("sm:size-20");
+    expect(classes).toContain("h-16");
+    expect(classes).toContain("w-16");
   });
 
-  it("side buttons (chat and settings) have responsive size: size-12 and sm:size-14", () => {
+  it("side buttons (chat and settings) have sample icon button size", () => {
     const wrapper = mount(ControlBar, {
       props: { callActive: false },
     });
 
     const chatButton = wrapper.find("[aria-label='Toggle chat']");
-    expect(chatButton.element.className).toContain("size-12");
-    expect(chatButton.element.className).toContain("sm:size-14");
+    expect(chatButton.element.className).toContain("h-14");
+    expect(chatButton.element.className).toContain("w-14");
 
     const settingsButton = wrapper.find("[aria-label='Settings']");
-    expect(settingsButton.element.className).toContain("size-12");
-    expect(settingsButton.element.className).toContain("sm:size-14");
+    expect(settingsButton.element.className).toContain("h-14");
+    expect(settingsButton.element.className).toContain("w-14");
   });
 
-  it("call button icon text has responsive size: text-2xl and sm:text-3xl", () => {
+  it("call button icon text uses sample icon size", () => {
     const wrapper = mount(ControlBar, {
       props: { callActive: false },
     });
     const callButton = wrapper.find("[aria-label='Start call']");
     const iconSpan = callButton.find(".material-symbols-outlined");
 
-    expect(iconSpan.element.className).toContain("text-2xl");
-    expect(iconSpan.element.className).toContain("sm:text-3xl");
+    expect(iconSpan.element.className).toContain("text-3xl");
   });
 });
 
@@ -287,7 +273,7 @@ describe("ChatPanel responsive layout classes", () => {
     });
 
     // Entry divs have the text-xs sm:text-sm classes
-    const entryDiv = wrapper.find("[class*='border-l-blue-500']");
+    const entryDiv = wrapper.find("[class*='border-l-blue']");
     expect(entryDiv.exists()).toBe(true);
 
     const classes = entryDiv.element.className;

@@ -51,8 +51,8 @@ describe("ChatPanel", () => {
       props: { open: true, log: sampleLog },
     });
 
-    const userLabels = screen.getAllByText("user");
-    const modelLabels = screen.getAllByText("model");
+    const userLabels = screen.getAllByText("나");
+    const modelLabels = screen.getAllByText("Jesica 선생님");
     expect(userLabels.length).toBe(2);
     expect(modelLabels.length).toBe(1);
   });
@@ -98,18 +98,18 @@ describe("ChatPanel", () => {
       props: { open: true, log: [] },
     });
 
-    await fireEvent.click(screen.getByText("Close"));
+    await fireEvent.click(screen.getByText("닫기"));
 
     expect(emitted()).toHaveProperty("close");
     expect(emitted().close).toHaveLength(1);
   });
 
-  it("displays 'Conversation' heading", () => {
+  it("displays Korean conversation heading", () => {
     render(ChatPanel, {
       props: { open: true, log: [] },
     });
 
-    expect(screen.getByText("Conversation")).toBeInTheDocument();
+    expect(screen.getByText("대화 기록")).toBeInTheDocument();
   });
 
   it("renders entries in reverse chronological order", () => {
@@ -132,13 +132,13 @@ describe("ChatPanel", () => {
     expect(fineIndex).toBeLessThan(helloIndex);
   });
 
-  it("applies blue border for user entries and primary border for model entries", () => {
+  it("applies blue border for user entries and teal border for model entries", () => {
     const { container } = render(ChatPanel, {
       props: { open: true, log: sampleLog },
     });
 
-    const userEntries = container.querySelectorAll(".border-l-blue-500");
-    const modelEntries = container.querySelectorAll(".border-l-primary");
+    const userEntries = container.querySelectorAll(".border-l-blue");
+    const modelEntries = container.querySelectorAll(".border-l-teal");
 
     expect(userEntries.length).toBe(2);
     expect(modelEntries.length).toBe(1);
@@ -150,7 +150,7 @@ describe("ChatPanel", () => {
     });
 
     // Should still render the section and header but no entries
-    expect(screen.getByText("Conversation")).toBeInTheDocument();
+    expect(screen.getByText("대화 기록")).toBeInTheDocument();
     const entries = container.querySelectorAll("[class*='border-l-']");
     expect(entries.length).toBe(0);
   });

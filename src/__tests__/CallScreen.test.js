@@ -42,7 +42,7 @@ globalThis.fetch = vi.fn().mockResolvedValue({
   text: async () => "",
 });
 
-const INTEREST_POPUP_TITLE = "어떤 주제로 이야기할까요?";
+const INTEREST_POPUP_TITLE = "어떤 주제로 대화할까요?";
 const CHIP_TOPIC = "AI가 번역가 일자리를 대체할까?";
 
 describe("CallScreen", () => {
@@ -57,18 +57,17 @@ describe("CallScreen", () => {
   it("renders idle screen with InterestPopup", () => {
     render(CallScreen);
 
-    expect(screen.getByText("Talky Live")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Talky" })).toBeInTheDocument();
     expect(screen.getByText("00:00")).toBeInTheDocument();
     expect(screen.getByText(INTEREST_POPUP_TITLE)).toBeInTheDocument();
-    expect(screen.getByLabelText("Toggle chat")).toBeInTheDocument();
-    expect(screen.getByLabelText("Start call")).toBeInTheDocument();
-    expect(screen.getByLabelText("Settings")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("메시지를 입력하세요...")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Start call")).not.toBeInTheDocument();
   });
 
   it("passes selected topic from InterestPopup to generateLesson", async () => {
     render(CallScreen);
 
-    await fireEvent.click(screen.getByRole("button", { name: CHIP_TOPIC }));
+    await fireEvent.click(screen.getByRole("option", { name: CHIP_TOPIC }));
     await fireEvent.click(screen.getByRole("button", { name: "시작하기" }));
 
     await waitFor(() => {
