@@ -174,6 +174,8 @@
       <div class="flex flex-wrap gap-2.5 mt-3">
         <button class="rounded-lg border border-grey-200 bg-background-layered px-3 py-1.5 text-xs font-bold text-on-surface transition-colors hover:bg-grey-100" @click="resetSession">새 세션 시작</button>
         <button class="rounded-lg border border-grey-200 bg-background-layered px-3 py-1.5 text-xs font-bold text-on-surface transition-colors hover:bg-grey-100" @click="playLastTts">마지막 TTS 재생</button>
+        <button class="rounded-lg border border-grey-200 bg-background-layered px-3 py-1.5 text-xs font-bold text-on-surface transition-colors hover:bg-grey-100" @click="downloadCurrentTtsWav">TTS WAV 저장</button>
+        <button class="rounded-lg border border-grey-200 bg-background-layered px-3 py-1.5 text-xs font-bold text-on-surface transition-colors hover:bg-grey-100" @click="showTtsDebugSummary">TTS 진단 로그</button>
         <button
           v-if="isDebugModeEnabled"
           class="rounded-lg border border-grey-200 bg-background-layered px-3 py-1.5 text-xs font-bold text-on-surface transition-colors hover:bg-grey-100"
@@ -846,6 +848,40 @@ async function playLastTts() {
     console.error("[Archive] playback failed", err);
     analysis.value = "Playback failed.";
   }
+}
+
+function downloadCurrentTtsWav() {
+  const wav = session.exportRecordedModelAudioWav();
+  if (!wav) {
+    analysis.value = "No in-memory model audio captured yet.";
+    return;
+  }
+  const url = URL.createObjectURL(wav);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `talky-tts-${safeFilenamePart(sessionId.value)}.wav`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  analysis.value = formatTtsDebugSummary("WAV saved", session.getModelAudioDebugSummary());
+}
+
+function showTtsDebugSummary() {
+  const summary = session.getModelAudioDebugSummary();
+  console.log("[TTS Debug]", summary);
+  analysis.value = formatTtsDebugSummary("TTS debug", summary);
+}
+
+function formatTtsDebugSummary(label, summary) {
+  return `${label}: ${summary.durationMs}ms, ${summary.chunks} chunks, ${summary.sampleRate}Hz, peak ${summary.peakDbfs ?? "n/a"} dBFS, underruns ${summary.playbackUnderruns}, discontinuities ${summary.boundaryDiscontinuities}, boundary smooths ${summary.playbackBoundarySmooths ?? "n/a"}, clipped ${summary.clippedSamples}`;
+}
+
+function safeFilenamePart(value) {
+  return String(value || Date.now())
+    .replace(/[^a-z0-9-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
 }
 
 onBeforeUnmount(() => {

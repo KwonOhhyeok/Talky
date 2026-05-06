@@ -58,11 +58,22 @@ export class GeminiLiveSession {
   readonly playbackStatsEveryChunks = 40;
   readonly declickFadeSamples = 8;
   readonly boundaryBlendSamples = 24;
+  readonly boundaryJumpThreshold = 12000 / 32768;
   playbackChunkCount = 0;
   playbackUnderrunCount = 0;
   playbackTinyChunkCount = 0;
+  playbackBoundarySmoothCount = 0;
   modelAudioChunkCount = 0;
   modelAudioTotalBytes = 0;
+  recordedModelAudioChunks: Uint8Array[] = [];
+  recordedModelAudioBytes = 0;
+  recordedModelAudioSampleRate: number | null = null;
+  recordedModelAudioSampleRates = new Set<number>();
+  modelAudioInvalidByteChunks = 0;
+  modelAudioClippedSamples = 0;
+  modelAudioDiscontinuities = 0;
+  modelAudioMaxAbsSample = 0;
+  modelAudioLastSample: number | null = null;
   pendingFadeIn = true;
   hasLastOutputSample = false;
   lastOutputSample = 0;
@@ -115,6 +126,7 @@ export class GeminiLiveSession {
     if (!ephemeralToken) {
       throw new Error("Missing ephemeral token");
     }
+    this.resetModelAudioDebugCapture();
 
     const endpoint =
       this.apiVersion === "v1alpha"
@@ -514,20 +526,21 @@ export class GeminiLiveSession {
 
   playAudio(base64: string, sampleRate?: number) {
     if (!this.audioContext || !this.outputGain) return;
-    const pcm16 = this.decodeBase64ToInt16(base64);
-    this.playPcm16(pcm16, sampleRate || this.outputSampleRate);
+    const resolvedSampleRate = sampleRate || this.outputSampleRate;
+    const bytes = this.decodeBase64ToBytes(base64);
+    this.captureModelAudioBytes(bytes, resolvedSampleRate);
+    const pcm16 = this.bytesToInt16(bytes);
+    this.playPcm16(pcm16, resolvedSampleRate);
   }
 
   playAudioFromBytes(bytes: Uint8Array, sampleRate?: number) {
+    const resolvedSampleRate = sampleRate || this.outputSampleRate;
+    this.captureModelAudioBytes(bytes, resolvedSampleRate);
     if (bytes.byteLength % 2 !== 0) {
       this.log("audio:model-invalid-pcm-bytes", { bytes: bytes.byteLength });
     }
-    const pcm16 = new Int16Array(
-      bytes.buffer,
-      bytes.byteOffset,
-      Math.floor(bytes.byteLength / 2)
-    );
-    this.playPcm16(pcm16, sampleRate || this.outputSampleRate);
+    const pcm16 = this.bytesToInt16(bytes);
+    this.playPcm16(pcm16, resolvedSampleRate);
   }
 
   playPcm16(pcm16: Int16Array, sampleRate: number) {
@@ -552,7 +565,25 @@ export class GeminiLiveSession {
     for (let i = 0; i < pcm16.length; i += 1) {
       channel[i] = pcm16[i] / 32768;
     }
-    this.applyBoundarySmoothing(channel, this.pendingFadeIn);
+
+    const now = this.audioContext.currentTime;
+    let startAt = this.nextPlaybackTime;
+    const minStartAt = now + this.playbackLeadSeconds;
+    let shouldFadeIn = this.pendingFadeIn;
+    if (startAt < minStartAt) {
+      if (startAt > 0 && startAt < now) {
+        this.playbackUnderrunCount += 1;
+        shouldFadeIn = true;
+        this.log("audio:playback-underrun", {
+          count: this.playbackUnderrunCount,
+          lagMs: this.toFixed((now - startAt) * 1000, 2),
+        });
+      }
+      startAt = minStartAt;
+      shouldFadeIn = true;
+    }
+
+    this.applyBoundarySmoothing(channel, shouldFadeIn);
     this.pendingFadeIn = false;
 
     const source = this.audioContext.createBufferSource();
@@ -572,23 +603,6 @@ export class GeminiLiveSession {
         this.onAudioEnd?.();
       }
     };
-
-    const now = this.audioContext.currentTime;
-    let startAt = this.nextPlaybackTime;
-    const minStartAt = now + this.playbackLeadSeconds;
-    if (startAt < minStartAt) {
-      if (startAt > 0 && startAt < now) {
-        this.playbackUnderrunCount += 1;
-        this.pendingFadeIn = true;
-        this.hasLastOutputSample = false;
-        this.log("audio:playback-underrun", {
-          count: this.playbackUnderrunCount,
-          lagMs: this.toFixed((now - startAt) * 1000, 2),
-        });
-      }
-      startAt = minStartAt;
-      this.pendingFadeIn = true;
-    }
 
     source.start(startAt);
     this.nextPlaybackTime = startAt + audioBuffer.duration;
@@ -614,21 +628,39 @@ export class GeminiLiveSession {
         lastChunkMs: this.toFixed(chunkMs, 2),
         underruns: this.playbackUnderrunCount,
         tinyChunks: this.playbackTinyChunkCount,
+        boundarySmooths: this.playbackBoundarySmoothCount,
       });
     }
   }
 
   decodeBase64ToInt16(base64: string) {
-    const binaryString = atob(base64);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i += 1) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
+    const bytes = this.decodeBase64ToBytes(base64);
     if (bytes.byteLength % 2 !== 0) {
       this.log("audio:model-invalid-pcm-bytes", { bytes: bytes.byteLength });
     }
-    return new Int16Array(bytes.buffer, 0, Math.floor(bytes.byteLength / 2));
+    return this.bytesToInt16(bytes);
+  }
+
+  decodeBase64ToBytes(base64: string) {
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i += 1) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  bytesToInt16(bytes: Uint8Array) {
+    const evenByteLength = bytes.byteLength - (bytes.byteLength % 2);
+    if (bytes.byteOffset % 2 === 0 && evenByteLength === bytes.byteLength) {
+      return new Int16Array(
+        bytes.buffer,
+        bytes.byteOffset,
+        Math.floor(bytes.byteLength / 2)
+      );
+    }
+    const copy = bytes.slice(0, evenByteLength);
+    return new Int16Array(copy.buffer, 0, Math.floor(copy.byteLength / 2));
   }
 
   base64FromBytes(bytes: Uint8Array) {
@@ -653,13 +685,21 @@ export class GeminiLiveSession {
       for (let i = 0; i < fadeSamples; i += 1) {
         channel[i] *= i / fadeSamples;
       }
+      this.playbackBoundarySmoothCount += 1;
     } else if (this.hasLastOutputSample) {
+      const boundaryJump = Math.abs(channel[0] - this.lastOutputSample);
+      if (boundaryJump <= this.boundaryJumpThreshold) {
+        this.lastOutputSample = channel[channel.length - 1];
+        this.hasLastOutputSample = true;
+        return;
+      }
       const blendSamples = Math.min(this.boundaryBlendSamples, channel.length);
       for (let i = 0; i < blendSamples; i += 1) {
         const t = (i + 1) / (blendSamples + 1);
         channel[i] =
           this.lastOutputSample + (channel[i] - this.lastOutputSample) * t;
       }
+      this.playbackBoundarySmoothCount += 1;
     }
     this.lastOutputSample = channel[channel.length - 1];
     this.hasLastOutputSample = true;
@@ -690,6 +730,131 @@ export class GeminiLiveSession {
         sampleRate,
         chunkMs: this.toFixed(chunkMs, 2),
       });
+    }
+  }
+
+  captureModelAudioBytes(bytes: Uint8Array, sampleRate: number) {
+    if (!bytes.byteLength) return;
+    this.recordedModelAudioChunks.push(new Uint8Array(bytes));
+    this.recordedModelAudioBytes += bytes.byteLength;
+    this.recordedModelAudioSampleRate ??= sampleRate;
+    this.recordedModelAudioSampleRates.add(sampleRate);
+    if (bytes.byteLength % 2 !== 0) {
+      this.modelAudioInvalidByteChunks += 1;
+    }
+
+    const pcm16 = this.bytesToInt16(bytes);
+    for (let i = 0; i < pcm16.length; i += 1) {
+      const sample = pcm16[i];
+      const abs = Math.abs(sample);
+      if (abs > this.modelAudioMaxAbsSample) {
+        this.modelAudioMaxAbsSample = abs;
+      }
+      if (abs >= 32760) {
+        this.modelAudioClippedSamples += 1;
+      }
+      if (
+        i === 0 &&
+        this.modelAudioLastSample !== null &&
+        Math.abs(sample - this.modelAudioLastSample) > 12000
+      ) {
+        this.modelAudioDiscontinuities += 1;
+      }
+    }
+    if (pcm16.length > 0) {
+      this.modelAudioLastSample = pcm16[pcm16.length - 1];
+    }
+  }
+
+  resetModelAudioDebugCapture() {
+    this.recordedModelAudioChunks = [];
+    this.recordedModelAudioBytes = 0;
+    this.recordedModelAudioSampleRate = null;
+    this.recordedModelAudioSampleRates = new Set<number>();
+    this.playbackChunkCount = 0;
+    this.playbackUnderrunCount = 0;
+    this.playbackTinyChunkCount = 0;
+    this.playbackBoundarySmoothCount = 0;
+    this.modelAudioChunkCount = 0;
+    this.modelAudioTotalBytes = 0;
+    this.modelAudioInvalidByteChunks = 0;
+    this.modelAudioClippedSamples = 0;
+    this.modelAudioDiscontinuities = 0;
+    this.modelAudioMaxAbsSample = 0;
+    this.modelAudioLastSample = null;
+  }
+
+  getModelAudioDebugSummary() {
+    const sampleRate = this.recordedModelAudioSampleRate || this.outputSampleRate;
+    const durationMs =
+      sampleRate > 0
+        ? ((this.recordedModelAudioBytes / 2) * 1000) / sampleRate
+        : 0;
+    return {
+      chunks: this.recordedModelAudioChunks.length,
+      bytes: this.recordedModelAudioBytes,
+      sampleRate,
+      sampleRates: Array.from(this.recordedModelAudioSampleRates),
+      durationMs: this.toFixed(durationMs, 1),
+      maxAbsSample: this.modelAudioMaxAbsSample,
+      peakDbfs:
+        this.modelAudioMaxAbsSample > 0
+          ? this.toFixed(20 * Math.log10(this.modelAudioMaxAbsSample / 32768), 2)
+          : null,
+      clippedSamples: this.modelAudioClippedSamples,
+      boundaryDiscontinuities: this.modelAudioDiscontinuities,
+      invalidByteChunks: this.modelAudioInvalidByteChunks,
+      playbackUnderruns: this.playbackUnderrunCount,
+      tinyPlaybackChunks: this.playbackTinyChunkCount,
+      playbackBoundarySmooths: this.playbackBoundarySmoothCount,
+    };
+  }
+
+  exportRecordedModelAudioWav() {
+    const sampleRate = this.recordedModelAudioSampleRate || this.outputSampleRate;
+    if (!this.recordedModelAudioBytes || !sampleRate) return null;
+    const pcmBytes = this.mergeByteChunks(
+      this.recordedModelAudioChunks,
+      this.recordedModelAudioBytes
+    );
+    return this.encodePcm16Wav(pcmBytes, sampleRate);
+  }
+
+  mergeByteChunks(chunks: Uint8Array[], totalBytes: number) {
+    if (chunks.length === 1) return chunks[0];
+    const merged = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return merged;
+  }
+
+  encodePcm16Wav(pcmBytes: Uint8Array, sampleRate: number) {
+    const dataBytes = pcmBytes.byteLength - (pcmBytes.byteLength % 2);
+    const buffer = new ArrayBuffer(44 + dataBytes);
+    const view = new DataView(buffer);
+    this.writeAscii(view, 0, "RIFF");
+    view.setUint32(4, 36 + dataBytes, true);
+    this.writeAscii(view, 8, "WAVE");
+    this.writeAscii(view, 12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    this.writeAscii(view, 36, "data");
+    view.setUint32(40, dataBytes, true);
+    new Uint8Array(buffer, 44).set(pcmBytes.slice(0, dataBytes));
+    return new Blob([buffer], { type: "audio/wav" });
+  }
+
+  writeAscii(view: DataView, offset: number, value: string) {
+    for (let i = 0; i < value.length; i += 1) {
+      view.setUint8(offset + i, value.charCodeAt(i));
     }
   }
 
