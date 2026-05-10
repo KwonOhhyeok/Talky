@@ -147,31 +147,38 @@ export class GeminiLiveSession {
     return new Promise<void>((resolve, reject) => {
       if (!socket) return;
       let settled = false;
-      const connectTimeoutMs = 12000;
+      const setupTimeoutMs = 12000;
+      const settleSetup = () => {
+        if (this.socket !== socket) return;
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        this.log("ws:setup-complete");
+        this.onStatus?.("connected");
+        resolve();
+      };
       const timeoutId = window.setTimeout(() => {
         if (settled) return;
         settled = true;
-        this.log("ws:connect-timeout", { timeoutMs: connectTimeoutMs });
+        this.log("ws:setup-timeout", { timeoutMs: setupTimeoutMs });
         this.onStatus?.("error");
         try {
           socket.close();
         } catch {
           // noop
         }
-        reject(new Error(`WebSocket connect timeout after ${connectTimeoutMs}ms`));
-      }, connectTimeoutMs);
+        reject(new Error(`WebSocket setup timeout after ${setupTimeoutMs}ms`));
+      }, setupTimeoutMs);
       socket.onopen = () => {
         if (this.socket !== socket) return;
         if (settled) return;
-        settled = true;
-        window.clearTimeout(timeoutId);
         this.log("ws:open");
         try {
           this.sendConfig();
-          this.onStatus?.("connected");
-          resolve();
         } catch (err) {
           this.log("ws:setup-error", err);
+          settled = true;
+          window.clearTimeout(timeoutId);
           this.onStatus?.("error");
           socket.close();
           reject(err);
@@ -211,7 +218,7 @@ export class GeminiLiveSession {
         });
         this.onStatus?.("closed");
       };
-      socket.onmessage = (event) => this.handleMessage(event, socket);
+      socket.onmessage = (event) => this.handleMessage(event, socket, settleSetup);
     });
   }
 
@@ -383,21 +390,25 @@ export class GeminiLiveSession {
     this.flushPendingAudio();
   }
 
-  handleMessage(event: MessageEvent, socket?: WebSocket) {
+  handleMessage(
+    event: MessageEvent,
+    socket?: WebSocket,
+    onSetupComplete?: () => void
+  ) {
     if (socket && this.socket !== socket) return;
     if (typeof event.data === "string") {
-      this.handleJsonMessage(event.data);
+      this.handleJsonMessage(event.data, onSetupComplete);
       return;
     }
     if (event.data instanceof Blob) {
       event.data
         .text()
-        .then((text) => this.handleJsonMessage(text))
+        .then((text) => this.handleJsonMessage(text, onSetupComplete))
         .catch(() => this.log("ws:message-blob-read-error"));
       return;
     }
     if (event.data instanceof ArrayBuffer) {
-      this.handleArrayBufferMessage(event.data);
+      this.handleArrayBufferMessage(event.data, onSetupComplete);
       return;
     }
     this.log("ws:message-nonjson", {
@@ -406,12 +417,12 @@ export class GeminiLiveSession {
     });
   }
 
-  handleArrayBufferMessage(buffer: ArrayBuffer) {
+  handleArrayBufferMessage(buffer: ArrayBuffer, onSetupComplete?: () => void) {
     const bytes = new Uint8Array(buffer);
     const decoded = new TextDecoder("utf-8").decode(bytes);
     const trimmed = decoded.trim();
     if (trimmed.startsWith("{")) {
-      this.handleJsonMessage(trimmed);
+      this.handleJsonMessage(trimmed, onSetupComplete);
       return;
     }
 
@@ -435,7 +446,7 @@ export class GeminiLiveSession {
     });
   }
 
-  handleJsonMessage(raw: string) {
+  handleJsonMessage(raw: string, onSetupComplete?: () => void) {
     let msg: any = null;
     try {
       msg = JSON.parse(raw);
@@ -448,6 +459,10 @@ export class GeminiLiveSession {
 
     if (!msg) return;
     this.log("ws:message", { keys: Object.keys(msg) });
+
+    if (msg.setupComplete || msg.setup_complete) {
+      onSetupComplete?.();
+    }
 
     const serverContent = msg.serverContent || msg.server_content;
     const inputTranscription =

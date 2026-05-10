@@ -658,7 +658,7 @@ async function startCall() {
       session.stop();
       return;
     }
-    connectingStep.value = "선생님 연결 중...";
+    connectingStep.value = "선생님 준비 중...";
     console.log("[CallScreen] startCall:connect");
     await session.connect({
       modelId: FIXED_MODEL_ID,
