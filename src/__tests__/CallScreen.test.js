@@ -49,9 +49,14 @@ describe("CallScreen", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
     generateLessonMock.mockResolvedValue(
       "Generated lesson material for testing."
     );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("renders idle screen with InterestPopup", () => {

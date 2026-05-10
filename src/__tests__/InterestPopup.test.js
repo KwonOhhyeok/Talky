@@ -20,6 +20,11 @@ describe("InterestPopup", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("starts with empty input and disabled start button", () => {
@@ -32,6 +37,12 @@ describe("InterestPopup", () => {
     expect(
       screen.queryByRole("button", { name: "입력값 지우기" })
     ).not.toBeInTheDocument();
+  });
+
+  it("shows only eight random topic chips", () => {
+    renderPopup();
+
+    expect(screen.getAllByRole("option")).toHaveLength(8);
   });
 
   it("applies selected chip topic to the input and starts with that topic", async () => {
