@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/vue";
 import InterestPopup from "../components/InterestPopup.vue";
 
 const PLACEHOLDER = "메시지를 입력하세요...";
-const CHIP_TOPIC = "AI가 번역가 일자리를 대체할까?";
+const CHIP_TOPIC = "가상 아이돌 팬덤, 진짜 사랑일까?";
 
 function renderPopup(props = {}) {
   const onStart = vi.fn();

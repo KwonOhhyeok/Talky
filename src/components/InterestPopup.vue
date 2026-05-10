@@ -15,36 +15,19 @@
         어떤 주제로 대화할까요?
       </h2>
 
-      <div class="grid w-full grid-cols-1 gap-md md:grid-cols-3" role="listbox" aria-label="주제 선택">
+      <div class="flex w-full max-w-2xl flex-wrap justify-center gap-sm" role="listbox" aria-label="주제 선택">
         <button
-          v-for="chip in featuredChips"
+          v-for="chip in chips"
           :key="chip"
           role="option"
           :aria-selected="selectedChip === chip"
-          class="group flex min-h-[100px] items-center justify-center rounded-xl p-md text-center shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-all duration-200 active:scale-95"
+          class="group flex h-[56px] w-[calc((100%_-_12px)/2)] items-center justify-center rounded-xl px-sm py-xs text-center shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-all duration-200 active:scale-95 sm:w-[180px]"
           :class="selectedChip === chip
             ? 'bg-blue-light text-primary ring-2 ring-primary'
             : 'bg-grey-50 text-grey-600 hover:bg-grey-100 hover:text-primary'"
           @click="handleChipSelect(chip)"
         >
-          <span class="font-body-lg text-body-lg transition-colors">{{ chip }}</span>
-        </button>
-      </div>
-
-      <div v-if="extraChips.length" class="mt-md flex flex-wrap justify-center gap-xs">
-        <button
-          v-for="chip in extraChips"
-          :key="chip"
-          type="button"
-          role="option"
-          :aria-selected="selectedChip === chip"
-          class="rounded-full border px-sm py-xs font-body-sm text-body-sm transition-colors"
-          :class="selectedChip === chip
-            ? 'border-primary bg-blue-light text-primary'
-            : 'border-grey-200 bg-background-layered text-secondary hover:bg-grey-50'"
-          @click="handleChipSelect(chip)"
-        >
-          {{ chip }}
+          <span class="line-clamp-2 font-body-sm text-body-sm transition-colors">{{ chip }}</span>
         </button>
       </div>
 
@@ -113,17 +96,15 @@ const panelRef = ref(null);
 const inputRef = ref(null);
 
 const chips = [
-  "AI가 번역가 일자리를 대체할까?",
-  "재택근무 vs 출근, 생산성은?",
-  "K-pop 해외 인기, 오래 갈까?",
-  "비건 식단, 건강과 환경 모두 이득일까?",
-  "1인 여행이 커플 여행보다 좋을까?",
-  "부동산 투자, 지금이 적기일까?",
-  "주 4일제, 한국에서도 가능할까?",
-  "사이드 프로젝트로 월급 외 수익 만들기",
+  "가상 아이돌 팬덤, 진짜 사랑일까?",
+  "저속노화 루틴, 건강일까 또 다른 압박일까?",
+  "러닝 크루, 운동일까 인맥 관리일까?",
+  "OTT 알고리즘, 취향을 넓힐까 가둘까?",
+  "워케이션, 자유일까 일의 침범일까?",
+  "AI 친구가 사람 친구를 대체해도 될까?",
+  "1인 가구의 자유, 외로움보다 클까?",
+  "가격 비교 소비, 똑똑함일까 피곤함일까?",
 ];
-const featuredChips = chips.slice(0, 3);
-const extraChips = chips.slice(3);
 
 const LOADING_STEPS = ["주제 분석 중...", "수업 자료 작성 중...", "마무리 중..."];
 
